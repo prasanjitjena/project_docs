@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "axios": "^1.10.0",
+    "axios-retry": "^4.5.0",
+    "dotenv": "^17.2.0",
+    "global-agent": "^3.0.0",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^8.16.4",
+    "msnodesqlv8": "^5.1.1",
+    "mssql": "^11.0.1",
+    "mysql2": "^3.14.4",
+    "winston": "^3.17.0"
+  }
+}
