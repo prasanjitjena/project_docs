@@ -1,0 +1,2100 @@
+{% extends "admin/base.html" %}
+{% block extrahead %}
+{% load static %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css"/>
+<script src="https://storage.googleapis.com/zometric220818_qtools/staticfiles/agrid/30.0.6_dist_ag-grid-enterprise.js"></script>
+<title>Data Entry Defective</title>
+
+{% endblock extrahead %}
+{% block content_title %}{% endblock %}
+{% block content %}
+<div class="container-fluid1">
+    <div class="row">
+        <div class="{% if hide_right_sidebar %} col-md-12 {% else %} col-md-9 {% endif %}">
+            <div class="row">
+                <div class="col-md-12">
+                    <table class="table table-bordered table-sm table-hover">
+                        <thead class="toptable">
+                            <tr>
+                                <th class="toptable">
+                                    S#
+                                </th>
+                                <th class="toptable">
+                                    Equipment
+                                </th>
+                                <th class="toptable">
+                                    Part
+                                </th>
+                                <th class="toptable">
+                                    Variable 
+                                </th>
+                                <th class="toptable">
+                                    LSL
+                                </th>
+                                <th class="toptable">
+                                    Target
+                                </th>
+                                <th class="toptable">
+                                    USL
+                                </th>
+                                <th class="toptable">
+                                    Hist. Mean
+                                </th>
+                                <th class="toptable">
+                                    Hist. Sigma
+                                </th>
+                                <th class="toptable">
+                                    Data Entry
+                                </th>
+                                <th class="toptable">
+                                    Analysis
+                                </th>     
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td class="toptable"><a href="{% url 'admin:app1_mapspcscheme_change' scheme.pk %}" target="_blank">{{scheme.pk}}</a></td>
+                            <td class="toptable">{{ scheme.equipment_id }}</td>
+                            <td class="toptable">{{ scheme.part_vc_id.part_id }}</td>
+                            <td class="toptable">{{ scheme.part_vc_id.vc_id }}</td>
+                            <td class="toptable">{{ scheme.part_vc_id.lower_spec_limit }}</td>
+                            <td class="toptable">{{ scheme.part_vc_id.target_value }}</td>
+                            <td class="toptable">{{ scheme.part_vc_id.upper_spec_limit }}</td>
+                            <td class="toptable">{{ scheme.historical_mu}}</td>
+                            <td class="toptable">{{ scheme.historical_sigma}}</td>
+                            <td class="toptable"><a href="{% url 'app1:dataentry_individual' scheme.pk %}">Single</a> | <a href="{% url 'app1:dataentry_imr_bulk' scheme.pk %}">Bulk</a></td>
+                            <td class="toptable"><a href="{% url 'app1:imranalysis' scheme.pk %}">I-MR</a> | <a href="{% url 'app1:processcapabilityindividual' scheme.pk %}">Capability</a> | <a href="{% url 'app1:analysis_view' scheme.pk %}">Compare</a> | <a href="{% url 'app1:realtime_imr_chart_refresh' scheme.pk %}">Auto Refresh</a></td>
+                        </tr>
+                        </tbody>
+                    </table> 
+
+                </div>
+            </div>
+                     
+            <div id="chartIDiv" style="width: 100%; height: 400px;"></div>
+            <div id="chartMRDiv" style="width: 100%; height: 400px;"></div>
+            <div id="gridDiv" class="ag-theme-alpine" style="display: none; width: 100%; height: 400px;"></div>
+            <div id="errorDiv" style="width: 100%; height: 200px;"></div>
+
+        </div>
+        {% if hide_right_sidebar %}
+        {% else %}
+        <div class="col-md-3 r-box">
+            <form  id="analysisForm"  mcguffin="form-group" action="" method="post" class="form-group" style="text-align: center;">
+                <div class="col-xs-12 col-sm-12 col-md-12 col-lg-12 col-xl-12">
+                    <div class="tab-content">
+                        <div role="tabpanel" class="tab-pane active">
+                            <div class="row">
+                                <div class="col-md-12 mt-3">
+                                    <table class="table text-left table-bordered table-sm table-hover">
+                                        {% csrf_token %}
+                                        {% if form.errors %}
+                                        {{ form.errors }}
+                                        {% endif %}
+                                        <tr>
+                                            <td style="vertical-align: middle;"> Timezone </td>
+                                            <td>{{work_unit_timezone}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="vertical-align: middle;">Last N Records</td>
+                                            <td>
+                                                <input type="number" id="last_n_records" name="last_n_records" value="31" min="1" max="1000">
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="vertical-align: middle;">Refresh Rate (minutes)</td>
+                                            <td><input type="number" id="refresh_rate" name="refresh_rate" value="1" step="0.1" min="0.5" max="30"></td>
+                                        </tr>
+                                        {% if scheme.historical_mu %}
+                                        <tr>
+                                            <td style="vertical-align: middle;">Use historical Mean </td>
+                                            <td><input type="checkbox" id="historical_mu" name="historical_mu" ></td>
+                                        </tr>
+                                        {% endif %}
+                                        {% if scheme.historical_sigma %}
+                                        <tr>
+                                            <td style="vertical-align: middle;">Use historical Sigma </td>
+                                            <td><input type="checkbox" id="historical_sigma" name="historical_sigma" ></td>
+                                        </tr>
+                                        {% endif %}
+                                         <tr>
+                                            <td style="vertical-align: middle;">Display Raw Data</td>
+                                            <td><input type="checkbox" id="display_raw_data" name="display_raw_data"></td>
+                                        </tr>
+                                        <!-- <tr>
+                                            <td>Hide Sidebar</td>
+                                            <td><input type="checkbox" id="hide_sidebar" name="hide_sidebar"></td>
+                                        </tr> -->
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                    <!-- <input type="submit" name="Submit" class="r-button" value="Submit"> -->
+            </form>
+                <div class="text-left">
+                    <p class="section-header">Quick Navigation</p>
+                    {{group_data_entry_df_html | safe}}
+                    {{related_variable_schemes_df_html | safe}}
+                    {{related_defective_schemes_df_html | safe}}
+                    {{related_defect_schemes_df_html | safe}}
+                </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    var schemeId = "{{ scheme_id }}";
+    var intervalId;
+    var endpoint = "{% url 'app1:refresh_imr_chart_data' scheme_id %}";
+    const i_graph_title = "{{i_graph_title | safe}}"
+    const mr_graph_title = "{{mr_graph_title | safe}}"
+    const yaxis_title = "{{yaxis_title | safe}}"
+    
+    function fetchData() {
+        // Get the checkbox state
+        // var useHistoricalP = "{{historical_p | safe }}";
+        var useHistoricalmu = $('#historical_mu').is(':checked');
+        var useHistoricalsigma = $('#historical_sigma').is(':checked');
+        var includeRawData = $('#display_raw_data').is(':checked');
+        var lastNRecords = $('#last_n_records').val() || 31; // default 31
+        var url = endpoint  + '?use_historical_mu=' + useHistoricalmu 
+                            + '&use_historical_sigma=' + useHistoricalsigma
+                            +'&include_raw_data=' + includeRawData
+                            + '&last_n_records=' + lastNRecords;
+                            
+        var loginUrl = "{{ login_url | safe}}";
+
+        $.ajax({
+            url: url,
+            method: 'GET',
+            // success: function(response) {
+            //     plotChart(response.data,response.controllines,response.settings,response.historical_mu,response.historical_sigma);
+            //     if (response.raw_data && includeRawData) {
+            //         displayRawData(response.raw_data,response.relevant_choice_keys,response.relevant_text_keys);
+            //     } else {
+            //         $('#gridDiv').hide();
+            //     }
+            // },
+            success: function(response) {
+                // If API sent an error message, show it and stop further chart rendering
+                if (response.error_msg) {
+                    $('#errorDiv').html(`
+                        <div style="
+                            border: 1px solid #ccc;
+                            background-color: #fef4f4;
+                            color: #333;
+                            padding: 20px;
+                            margin-top: 20px;
+                            border-radius: 8px;
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            max-width: 900px;
+                        ">
+                            <h2 style="margin-top: 0; color: #c00;">${response.error_msg}</h2>
+                        </div>
+                    `);
+                    $('#chartIDiv').hide();
+                    $('#chartMRDiv').hide();
+                    $('#gridDiv').hide();
+                    return; // Stop here
+                }
+
+                // No error — clear errorDiv and show chart
+                $('#errorDiv').empty();
+                $('#chartIDiv').show();
+
+                plotIChart(
+                    response.i_data,
+                    response.controllines,
+                    response.settings,
+                    response.historical_mu,
+                    response.historical_sigma,
+                    response.i_violations  // New: pass violations
+                );
+                plotMRChart(
+                    response.mr_data,
+                    response.controllines,
+                    response.settings,
+                    response.mr_violations  
+                )
+                if (response.raw_data && includeRawData) {
+                    displayRawData(response.raw_data, response.relevant_choice_keys, response.relevant_text_keys);
+                } else {
+                    $('#gridDiv').hide();
+                }
+            },
+
+            error: function(xhr, status, error) {
+                if (xhr.status === 401 || xhr.status === 403) {  // Handle both 401 and 403
+                    $('#errorDiv').html(`
+                        <div style="
+                            border: 1px solid #ccc;
+                            background-color: #fef4f4;
+                            color: #333;
+                            padding: 20px;
+                            margin-top: 20px;
+                            border-radius: 8px;
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            max-width: 900px;
+                        ">
+                            <h3 style="margin-top: 0; color: #c00;">Session Expired</h3>
+                            <p >
+                                You have been logged out due to inactivity or session expiration.
+                                Please <a href="${loginUrl}" id="loginRedirect" style="color: #007BFF; text-decoration: underline;">Log in</a> to continue accessing the real-time P chart.
+                            </p>
+                            <p style="margin-top: 10px; ">
+                                You will be automatically redirected to the Loginpage in <strong style="color: #007BFF">60 seconds</strong>.
+                            </p>
+                        </div>
+                    `);
+
+                    // Stop auto-refresh
+                    if (intervalId) {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
+
+                    $('#analysisForm').hide(); 
+                    $('#gridDiv').hide();
+                    $('#chartIDiv').hide();  
+                    $('#chartMRDiv').hide();  
+
+                    // Redirect after 60 seconds to homepage
+                    setTimeout(function() {
+                        window.location.href = window.location.pathname;
+                    }, 60 * 1000);
+
+                    // Redirect immediately if user clicks the "Login again" link
+                    $(document).on('click', '#loginRedirect', function(e) {
+                        e.preventDefault();
+                        window.location.href = window.location.pathname;
+                    });
+                } else {
+                    console.error('Unexpected error:', xhr.status, error);
+                    $('#chartIDiv').html('An error occurred while fetching data.');
+                }
+            }
+
+       
+        });
+    }
+
+    // function plotIChart(data, controllines, settings, historical_mu, historical_sigma) {
+    //     if (data.length <= 4) {
+    //         $('#chartIDiv').html('Not enough data for I chart');
+    //         return;
+    //     }
+    //     // Reverse data to plot from oldest to newest (since backend sorts by -time_stamp)
+    //     data = data.reverse();
+    //     const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
+    //     const timeStamps = data.map(d => d.time_stamp);
+    //     const dataPoints = data.map(d => d.data_point);
+    //     const legend_decimal = settings.legend_decimals;
+
+    //     // Initialize traces
+    //     const traces = [
+    //         {
+    //             x: xRange,
+    //             y: dataPoints,
+    //             type: 'scatter',
+    //             mode: 'lines+markers',
+    //             name: 'Observations',
+    //             line: { color: 'cornflowerblue', width: 1 },
+    //             marker: { size: 7 },
+    //             opacity: 0.8,
+    //             text: timeStamps,
+    //             hovertemplate: '%{y}, %{text}'
+    //         },
+    //         {
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.i_cl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'CL',
+    //             line: { dash: 'dash', color: 'black', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         }
+    //     ];
+
+    //     // Add control and spec lines based on settings
+    //     if (settings.show_3sl_upper) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.i_ucl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'UCL',
+    //             line: { color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+        
+    //     if (settings.show_3sl_lower) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.i_lcl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'LCL',
+    //             line: { color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+       
+    //     if (settings.show_2sl_upper) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.i_2su),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'U2sL',
+    //             line: { dash: 'dot', color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+       
+    //     if (settings.show_2sl_lower) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.i_2sl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'L2sL',
+    //             line: { dash: 'dot', color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+        
+    //     if (settings.show_usl && controllines.usl !== null) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.usl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'USL',
+    //             line: { color: 'blue', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+        
+    //     if (settings.show_lsl && controllines.lsl !== null) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.lsl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'LSL',
+    //             line: { color: 'blue', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+
+    //     // Compute SPC Rule violations
+    //     const rule1Above = dataPoints.map((dp, i) => dp > controllines.i_ucl ? i : null).filter(i => i !== null);
+    //     const rule1Below = dataPoints.map((dp, i) => dp < controllines.i_lcl ? i : null).filter(i => i !== null);
+
+        
+    //     // Rule 1: Point > 3σ (beyond UCL/LCL)
+    //     if (settings.rule_1_b) {
+    //         const rule1Above = dataPoints.map((dp, i) => dp > controllines.i_ucl ? i : null).filter(i => i !== null);
+    //         const rule1Below = dataPoints.map((dp, i) => dp < controllines.i_lcl ? i : null).filter(i => i !== null);
+    //         if (rule1Above.length > 0) {
+    //             traces.push({
+    //                 x: rule1Above.map(i => xRange[i]),
+    //                 y: rule1Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-1: Above UCL',
+    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
+    //                 text: rule1Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule1Below.length > 0) {
+    //             traces.push({
+    //                 x: rule1Below.map(i => xRange[i]),
+    //                 y: rule1Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-1: Below LCL',
+    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
+    //                 text: rule1Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 2: 9 points in a row on the same side of CL
+    //     if (settings.rule_2_b) {
+    //         const k_r2 = 9;
+    //         let rule2AboveSet = new Set();
+    //         let rule2BelowSet = new Set();
+    //         for (let i = 0; i <= dataPoints.length - k_r2; i++) {
+    //             let allAbove = true;
+    //             let allBelow = true;
+    //             for (let j = i; j < i + k_r2; j++) {
+    //                 if (dataPoints[j] <= controllines.i_cl) allAbove = false;
+    //                 if (dataPoints[j] >= controllines.i_cl) allBelow = false;
+    //             }
+    //             if (allAbove) {
+    //                 for (let j = i; j < i + k_r2; j++) rule2AboveSet.add(j);
+    //             }
+    //             if (allBelow) {
+    //                 for (let j = i; j < i + k_r2; j++) rule2BelowSet.add(j);
+    //             }
+    //         }
+    //         const rule2Above = Array.from(rule2AboveSet);
+    //         const rule2Below = Array.from(rule2BelowSet);
+    //         if (rule2Above.length > 0) {
+    //             traces.push({
+    //                 x: rule2Above.map(i => xRange[i]),
+    //                 y: rule2Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-2: Above CL',
+    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
+    //                 text: rule2Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule2Below.length > 0) {
+    //             traces.push({
+    //                 x: rule2Below.map(i => xRange[i]),
+    //                 y: rule2Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-2: Below CL',
+    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
+    //                 text: rule2Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 3: 6 points in a row, all increasing or decreasing
+    //     if (settings.rule_3_b) {
+    //         const k_r3 = 6;
+    //         let rule3Increasing = [];
+    //         let rule3Decreasing = [];
+    //         for (let i = 0; i <= dataPoints.length - k_r3; i++) {
+    //             let increasing = true;
+    //             let decreasing = true;
+    //             for (let j = i; j < i + k_r3 - 1; j++) {
+    //                 if (dataPoints[j] >= dataPoints[j + 1]) increasing = false;
+    //                 if (dataPoints[j] <= dataPoints[j + 1]) decreasing = false;
+    //             }
+    //             if (increasing) {
+    //                 for (let j = i; j < i + k_r3; j++) rule3Increasing.push(j);
+    //             }
+    //             if (decreasing) {
+    //                 for (let j = i; j < i + k_r3; j++) rule3Decreasing.push(j);
+    //             }
+    //         }
+    //         if (rule3Increasing.length > 0) {
+    //             traces.push({
+    //                 x: rule3Increasing.map(i => xRange[i]),
+    //                 y: rule3Increasing.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-3: Increasing',
+    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+    //                 text: rule3Increasing.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule3Decreasing.length > 0) {
+    //             traces.push({
+    //                 x: rule3Decreasing.map(i => xRange[i]),
+    //                 y: rule3Decreasing.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-3: Decreasing',
+    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+    //                 text: rule3Decreasing.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 4: 14 points in a row, alternating up and down
+    //     if (settings.rule_4_b) {
+    //         const k_r4 = 14;
+    //         let rule4Alternating = [];
+    //         for (let i = 0; i <= dataPoints.length - k_r4; i++) {
+    //             let alternating = true;
+    //             for (let j = i; j < i + k_r4 - 1; j++) {
+    //                 const slope1 = dataPoints[j + 1] - dataPoints[j];
+    //                 const slope2 = dataPoints[j + 2] - dataPoints[j + 1];
+    //                 if (slope1 * slope2 >= 0) alternating = false;
+    //             }
+    //             if (alternating) {
+    //                 for (let j = i; j < i + k_r4; j++) rule4Alternating.push(j);
+    //             }
+    //         }
+    //         if (rule4Alternating.length > 0) {
+    //             traces.push({
+    //                 x: rule4Alternating.map(i => xRange[i]),
+    //                 y: rule4Alternating.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-4: Alternating',
+    //                 marker: { color: 'indianred', size: 9, symbol: 'circle' },
+    //                 text: rule4Alternating.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 5: 2 out of 3 points > 2σ from CL (same side)
+    //     if (settings.rule_5_b) {
+    //         const k_r5 = 2;
+    //         const windowSize = k_r5 + 1;
+    //         let rule5AboveSet = new Set();
+    //         let rule5BelowSet = new Set();
+    //         const u2sd = controllines.i_2su;
+    //         const l2sd = controllines.i_2sl;
+    //         for (let i = 0; i <= dataPoints.length - windowSize; i++) {
+    //             let countAbove = 0;
+    //             let countBelow = 0;
+    //             for (let j = i; j < i + windowSize; j++) {
+    //                 if (dataPoints[j] > u2sd) countAbove++;
+    //                 if (dataPoints[j] < l2sd) countBelow++;
+    //             }
+    //             if (countAbove >= k_r5) {
+    //                 for (let j = i; j < i + windowSize; j++) {
+    //                     if (dataPoints[j] > u2sd) rule5AboveSet.add(j);
+    //                 }
+    //             }
+    //             if (countBelow >= k_r5) {
+    //                 for (let j = i; j < i + windowSize; j++) {
+    //                     if (dataPoints[j] < l2sd) rule5BelowSet.add(j);
+    //                 }
+    //             }
+    //         }
+    //         const rule5Above = Array.from(rule5AboveSet);
+    //         const rule5Below = Array.from(rule5BelowSet);
+    //         if (rule5Above.length > 0) {
+    //             traces.push({
+    //                 x: rule5Above.map(i => xRange[i]),
+    //                 y: rule5Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-5: Above 2σ',
+    //                 marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
+    //                 text: rule5Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule5Below.length > 0) {
+    //             traces.push({
+    //                 x: rule5Below.map(i => xRange[i]),
+    //                 y: rule5Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-5: Below 2σ',
+    //                 marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
+    //                 text: rule5Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 6: 4 out of 5 points > 1σ from CL (same side)
+    //     if (settings.rule_6_b) {
+    //         const k_r6 = 4;
+    //         const windowSize = k_r6 + 1;
+    //         let rule6AboveSet = new Set();
+    //         let rule6BelowSet = new Set();
+    //         const u1sd = controllines.i_cl + historical_sigma;
+    //         const l1sd = controllines.i_cl - historical_sigma;
+    //         for (let i = 0; i <= dataPoints.length - windowSize; i++) {
+    //             let countAbove = 0;
+    //             let countBelow = 0;
+    //             for (let j = i; j < i + windowSize; j++) {
+    //                 if (dataPoints[j] > u1sd) countAbove++;
+    //                 if (dataPoints[j] < l1sd) countBelow++;
+    //             }
+    //             if (countAbove >= k_r6) {
+    //                 for (let j = i; j < i + windowSize; j++) {
+    //                     if (dataPoints[j] > u1sd) rule6AboveSet.add(j);
+    //                 }
+    //             }
+    //             if (countBelow >= k_r6) {
+    //                 for (let j = i; j < i + windowSize; j++) {
+    //                     if (dataPoints[j] < l1sd) rule6BelowSet.add(j);
+    //                 }
+    //             }
+    //         }
+    //         const rule6Above = Array.from(rule6AboveSet);
+    //         const rule6Below = Array.from(rule6BelowSet);
+    //         if (rule6Above.length > 0) {
+    //             traces.push({
+    //                 x: rule6Above.map(i => xRange[i]),
+    //                 y: rule6Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-6: Above 1σ',
+    //                 marker: { color: 'violet', size: 9, symbol: 'circle' },
+    //                 text: rule6Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule6Below.length > 0) {
+    //             traces.push({
+    //                 x: rule6Below.map(i => xRange[i]),
+    //                 y: rule6Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-6: Below 1σ',
+    //                 marker: { color: 'violet', size: 9, symbol: 'circle' },
+    //                 text: rule6Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 7: 15 points in a row within 1σ of CL
+    //     if (settings.rule_7_b) {
+    //         const k_r7 = 15;
+    //         let rule7Set = new Set();
+    //         const u1sd = controllines.i_cl + historical_sigma;
+    //         const l1sd = controllines.i_cl - historical_sigma;
+    //         for (let i = 0; i <= dataPoints.length - k_r7; i++) {
+    //             let allWithin = true;
+    //             for (let j = i; j < i + k_r7; j++) {
+    //                 if (dataPoints[j] >= u1sd || dataPoints[j] <= l1sd) allWithin = false;
+    //             }
+    //             if (allWithin) {
+    //                 for (let j = i; j < i + k_r7; j++) rule7Set.add(j);
+    //             }
+    //         }
+    //         const rule7 = Array.from(rule7Set);
+    //         if (rule7.length > 0) {
+    //             traces.push({
+    //                 x: rule7.map(i => xRange[i]),
+    //                 y: rule7.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-7: Within 1σ',
+    //                 marker: { color: 'yellowgreen', size: 9, symbol: 'circle' },
+    //                 text: rule7.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 8: 8 points in a row > 1σ from CL (either side)
+    //     if (settings.rule_8_b) {
+    //         const k_r8 = 8;
+    //         let rule8Set = new Set();
+    //         const u1sd = controllines.i_cl + historical_sigma;
+    //         const l1sd = controllines.i_cl - historical_sigma;
+    //         for (let i = 0; i <= dataPoints.length - k_r8; i++) {
+    //             let allOutside = true;
+    //             for (let j = i; j < i + k_r8; j++) {
+    //                 if (dataPoints[j] <= u1sd && dataPoints[j] >= l1sd) allOutside = false;
+    //             }
+    //             if (allOutside) {
+    //                 for (let j = i; j < i + k_r8; j++) rule8Set.add(j);
+    //             }
+    //         }
+    //         const rule8 = Array.from(rule8Set);
+    //         if (rule8.length > 0) {
+    //             traces.push({
+    //                 x: rule8.map(i => xRange[i]),
+    //                 y: rule8.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-8: Outside 1σ',
+    //                 marker: { color: 'darkgreen', size: 9, symbol: 'circle' },
+    //                 text: rule8.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+        
+    //     // Annotations
+    //     const annotations = [
+    //         {
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.i_cl,
+    //             text: `CL=${controllines.i_cl.toFixed(legend_decimal)}`,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 55,
+    //             ay: 0,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         }
+    //     ];
+    //     if (settings.show_3sl_upper) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.i_ucl,
+    //             text: `UCL=${controllines.i_ucl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: -10,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         });
+    //     }
+        
+    //     if (settings.show_3sl_lower) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.i_lcl,
+    //             text: `LCL=${controllines.i_lcl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: 10,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         });
+    //     }
+        
+    //     if (settings.show_2sl_upper) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.i_2su,
+    //             text: `U2sL=${controllines.i_2su.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: -5,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+    //         });
+    //     }
+        
+    //     if (settings.show_2sl_lower) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.i_2sl,
+    //             text: `L2sL=${controllines.i_2sl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: 5,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+    //         });
+    //     }
+        
+    //     if (settings.show_usl && controllines.usl !== null) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.usl,
+    //             text: `USL=${controllines.usl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: -15,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+    //         });
+    //     }
+        
+    //     if (settings.show_lsl && controllines.lsl !== null) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.lsl,
+    //             text: `LSL=${controllines.lsl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: 15,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+    //         });
+    //     }
+
+    //     // Adjust x-axis ticks
+    //     let tickvals = xRange;
+    //     let ticktext = timeStamps;
+    //     if (data.length > 30) {
+    //         const interval = Math.ceil(data.length / 30);
+    //         tickvals = xRange.filter((_, i) => i % interval === 0);
+    //         ticktext = timeStamps.filter((_, i) => i % interval === 0);
+    //     }
+
+    //     // Layout
+    //     const layout = {
+    //         // height: 500, // Height in pixels
+    //         title: { text: i_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 13 } },
+    //         margin: { l: 30, r: 30, b: 30, t: 60 },
+    //         xaxis: {
+    //             tickangle: 45,
+    //             tickmode: 'array',
+    //             tickvals: tickvals,
+    //             ticktext: ticktext,
+    //             automargin: true,
+    //             showline: true,
+    //             linewidth: 1,
+    //             linecolor: 'black',
+    //             mirror: false,
+    //             ticks: 'outside',
+    //             gridcolor: 'rgba(0,0,0,0)',
+    //             tickfont: { size: 10 },
+    //             zeroline: false,
+    //             autorange: true
+    //         },
+    //         yaxis: {
+    //             title: { text: yaxis_title, x: 0.5 },
+    //             automargin: true,
+    //             showline: true,
+    //             linewidth: 1,
+    //             linecolor: 'black',
+    //             mirror: false,
+    //             gridcolor: 'rgba(0,0,0,0)',
+    //             zeroline: false,
+    //             autorange: true,
+    //             ticks: 'outside',
+    //             tickfont: { size: 8.5 },
+    //         },
+    //         annotations: annotations,
+    //         legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
+    //         plot_bgcolor: 'rgba(0,0,0,0)',
+    //         hovermode: 'closest',
+    //         shapes: [
+    //             {
+    //                 type: 'rect',
+    //                 x0: 0,
+    //                 y0: 0,
+    //                 x1: 1,
+    //                 y1: 1,
+    //                 xref: 'paper',
+    //                 yref: 'paper',
+    //                 line: { color: 'black', width: 1 },
+    //                 fillcolor: 'rgba(0,0,0,0)'
+    //             }
+    //         ],
+    //         showlegend: true,
+    //     };
+
+    //     // Plot
+    //     Plotly.newPlot('chartIDiv', traces, layout, {
+    //         displaylogo: false,
+    //         modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
+    //     });
+    // }
+
+    function plotIChart(data, controllines, settings, historical_mu, historical_sigma, violations) {
+        if (data.length <= 4 || !controllines || !controllines.i_cl) {
+            $('#chartIDiv').html('Not enough data or invalid control lines for I chart');
+            return;
+        }
+        // Reverse data to plot from oldest to newest (since backend sorts by -time_stamp)
+        data = data.reverse();
+        const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
+        const timeStamps = data.map(d => d.time_stamp);
+        const dataPoints = data.map(d => d.data_point);
+        const legend_decimal = settings.legend_decimals;
+
+        // Initialize traces
+        const traces = [
+            {
+                x: xRange,
+                y: dataPoints,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Observations',
+                line: { color: 'cornflowerblue', width: 1 },
+                marker: { size: 7 },
+                opacity: 0.8,
+                text: timeStamps,
+                hovertemplate: '%{y}, %{text}'
+            },
+            {
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.i_cl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'CL',
+                line: { dash: 'dash', color: 'black', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            }
+        ];
+
+        // Add control and spec lines based on settings
+        if (settings.show_3sl_upper) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.i_ucl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'UCL',
+                line: { color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+        
+        if (settings.show_3sl_lower) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.i_lcl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'LCL',
+                line: { color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+    
+        if (settings.show_2sl_upper) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.i_2su),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'U2sL',
+                line: { dash: 'dot', color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+    
+        if (settings.show_2sl_lower) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.i_2sl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'L2sL',
+                line: { dash: 'dot', color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+        
+        if (settings.show_usl && controllines.usl !== null) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.usl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'USL',
+                line: { color: 'blue', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+        
+        if (settings.show_lsl && controllines.lsl !== null) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.lsl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'LSL',
+                line: { color: 'blue', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+
+        // Add SPC Rule violation traces
+        if (settings.rule_1_b) {
+            if (settings.show_3sl_upper_alerts && violations.rule1_above.length > 0) {
+                traces.push({
+                    x: violations.rule1_above.map(i => xRange[i]),
+                    y: violations.rule1_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-1: Above UCL',
+                    marker: { color: 'darkred', size: 9, symbol: 'circle' },
+                    text: violations.rule1_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (settings.show_3sl_lower_alerts && violations.rule1_below.length > 0) {
+                traces.push({
+                    x: violations.rule1_below.map(i => xRange[i]),
+                    y: violations.rule1_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-1: Below LCL',
+                    marker: { color: 'darkred', size: 9, symbol: 'circle' },
+                    text: violations.rule1_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_2_b) {
+            if (violations.rule2_above.length > 0) {
+                traces.push({
+                    x: violations.rule2_above.map(i => xRange[i]),
+                    y: violations.rule2_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-2: Above CL',
+                    marker: { color: 'orange', size: 11, symbol: 'circle' },
+                    text: violations.rule2_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule2_below.length > 0) {
+                traces.push({
+                    x: violations.rule2_below.map(i => xRange[i]),
+                    y: violations.rule2_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-2: Below CL',
+                    marker: { color: 'orange', size: 11, symbol: 'circle' },
+                    text: violations.rule2_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_3_b) {
+            if (violations.rule3_increasing.length > 0) {
+                traces.push({
+                    x: violations.rule3_increasing.map(i => xRange[i]),
+                    y: violations.rule3_increasing.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-3: Increasing',
+                    marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+                    text: violations.rule3_increasing.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule3_decreasing.length > 0) {
+                traces.push({
+                    x: violations.rule3_decreasing.map(i => xRange[i]),
+                    y: violations.rule3_decreasing.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-3: Decreasing',
+                    marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+                    text: violations.rule3_decreasing.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_4_b) {
+            if (violations.rule4_alternating.length > 0) {
+                traces.push({
+                    x: violations.rule4_alternating.map(i => xRange[i]),
+                    y: violations.rule4_alternating.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-4: Alternating',
+                    marker: { color: 'indianred', size: 9, symbol: 'circle' },
+                    text: violations.rule4_alternating.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_5_b) {
+            if (violations.rule5_above.length > 0) {
+                traces.push({
+                    x: violations.rule5_above.map(i => xRange[i]),
+                    y: violations.rule5_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-5: Above 2σ',
+                    marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
+                    text: violations.rule5_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule5_below.length > 0) {
+                traces.push({
+                    x: violations.rule5_below.map(i => xRange[i]),
+                    y: violations.rule5_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-5: Below 2σ',
+                    marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
+                    text: violations.rule5_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_6_b) {
+            if (violations.rule6_above.length > 0) {
+                traces.push({
+                    x: violations.rule6_above.map(i => xRange[i]),
+                    y: violations.rule6_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-6: Above 1σ',
+                    marker: { color: 'violet', size: 9, symbol: 'circle' },
+                    text: violations.rule6_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule6_below.length > 0) {
+                traces.push({
+                    x: violations.rule6_below.map(i => xRange[i]),
+                    y: violations.rule6_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-6: Below 1σ',
+                    marker: { color: 'violet', size: 9, symbol: 'circle' },
+                    text: violations.rule6_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_7_b) {
+            if (violations.rule7_within.length > 0) {
+                traces.push({
+                    x: violations.rule7_within.map(i => xRange[i]),
+                    y: violations.rule7_within.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-7: Within 1σ',
+                    marker: { color: 'yellowgreen', size: 9, symbol: 'circle' },
+                    text: violations.rule7_within.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.rule_8_b) {
+            if (violations.rule8_outside.length > 0) {
+                traces.push({
+                    x: violations.rule8_outside.map(i => xRange[i]),
+                    y: violations.rule8_outside.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-8: Outside 1σ',
+                    marker: { color: 'darkgreen', size: 9, symbol: 'circle' },
+                    text: violations.rule8_outside.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        // Annotations
+        const annotations = [
+            {
+                x: xRange[xRange.length - 1],
+                y: controllines.i_cl,
+                text: `CL=${controllines.i_cl.toFixed(legend_decimal)}`,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 55,
+                ay: 0,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            }
+        ];
+        
+        if (settings.show_3sl_upper) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.i_ucl,
+                text: `UCL=${controllines.i_ucl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: -10,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            });
+        }
+        
+        if (settings.show_3sl_lower) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.i_lcl,
+                text: `LCL=${controllines.i_lcl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: 10,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            });
+        }
+        
+        if (settings.show_2sl_upper) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.i_2su,
+                text: `U2sL=${controllines.i_2su.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: -5,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+            });
+        }
+        
+        if (settings.show_2sl_lower) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.i_2sl,
+                text: `L2sL=${controllines.i_2sl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: 5,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+            });
+        }
+        
+        if (settings.show_usl && controllines.usl !== null) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.usl,
+                text: `USL=${controllines.usl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: -15,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+            });
+        }
+        
+        if (settings.show_lsl && controllines.lsl !== null) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.lsl,
+                text: `LSL=${controllines.lsl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: 15,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' }
+            });
+        }
+
+        // Adjust x-axis ticks
+        let tickvals = xRange;
+        let ticktext = timeStamps;
+        if (data.length > 31) {
+            const interval = Math.ceil(data.length / 30);
+            tickvals = xRange.filter((_, i) => i % interval === 0);
+            ticktext = timeStamps.filter((_, i) => i % interval === 0);
+        }
+
+        // Layout
+        const layout = {
+            title: { text: i_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 15 } },
+            margin: { l: 30, r: 30, b: 30, t: 60 },
+            xaxis: {
+                tickangle: 45,
+                tickmode: 'array',
+                tickvals: tickvals,
+                ticktext: ticktext,
+                automargin: true,
+                showline: true,
+                linewidth: 1,
+                linecolor: 'black',
+                mirror: false,
+                ticks: 'outside',
+                gridcolor: 'rgba(0,0,0,0)',
+                tickfont: { size: 10 },
+                zeroline: false,
+                autorange: true
+            },
+            yaxis: {
+                title: { text: yaxis_title, x: 0.5 },
+                automargin: true,
+                showline: true,
+                linewidth: 1,
+                linecolor: 'black',
+                mirror: false,
+                gridcolor: 'rgba(0,0,0,0)',
+                zeroline: false,
+                autorange: true,
+                ticks: 'outside',
+                tickfont: { size: 8.5 },
+            },
+            annotations: annotations,
+            legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            hovermode: 'closest',
+            shapes: [
+                {
+                    type: 'rect',
+                    x0: 0,
+                    y0: 0,
+                    x1: 1,
+                    y1: 1,
+                    xref: 'paper',
+                    yref: 'paper',
+                    line: { color: 'black', width: 1 },
+                    fillcolor: 'rgba(0,0,0,0)'
+                }
+            ],
+            showlegend: true,
+        };
+
+        // Plot
+        Plotly.newPlot('chartIDiv', traces, layout, {
+            displaylogo: false,
+            modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
+        });
+        // iChartInitialized = true;
+    
+    }
+
+    
+    function plotMRChart(data, controllines, settings, violations) {
+        if (data.length <= 3 || !controllines || !controllines.mr_cl) {
+            $('#chartMRDiv').html('Not enough data or invalid control lines for MR chart');
+            return;
+        }
+        // Reverse data to plot from oldest to newest
+        data = data.reverse();
+        const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
+        const timeStamps = data.map(d => d.time_stamp);
+        const dataPoints = data.map(d => d.mr);
+        const legend_decimal = settings.legend_decimals;
+
+        // Initialize traces
+        const traces = [
+            {
+                x: xRange,
+                y: dataPoints,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Moving Range',
+                line: { color: 'cornflowerblue', width: 1 },
+                marker: { size: 7 },
+                opacity: 0.8,
+                text: timeStamps,
+                hovertemplate: '%{y}, %{text}'
+            },
+            {
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.mr_cl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'CL',
+                line: { dash: 'dash', color: 'black', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            }
+        ];
+
+        // Add control lines based on settings
+        if (settings.show_3sl_upper) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.mr_ucl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'UCL',
+                line: { color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+        
+        if (settings.show_3sl_lower) {
+            traces.push({
+                x: xRange,
+                y: Array(xRange.length).fill(controllines.mr_lcl),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'LCL',
+                line: { color: 'red', shape: 'hvh' },
+                opacity: 0.8,
+                showlegend: false
+            });
+        }
+
+        // Add SPC Rule violation traces
+        if (settings.r_s_rule_1_b) {
+            if (violations.rule1_above.length > 0) {
+                traces.push({
+                    x: violations.rule1_above.map(i => xRange[i]),
+                    y: violations.rule1_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-1: Above UCL',
+                    marker: { color: 'darkred', size: 9, symbol: 'circle' },
+                    text: violations.rule1_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule1_below.length > 0) {
+                traces.push({
+                    x: violations.rule1_below.map(i => xRange[i]),
+                    y: violations.rule1_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-1: Below LCL',
+                    marker: { color: 'darkred', size: 9, symbol: 'circle' },
+                    text: violations.rule1_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.r_s_rule_2_b) {
+            if (violations.rule2_above.length > 0) {
+                traces.push({
+                    x: violations.rule2_above.map(i => xRange[i]),
+                    y: violations.rule2_above.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-2: Above CL',
+                    marker: { color: 'orange', size: 11, symbol: 'circle' },
+                    text: violations.rule2_above.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule2_below.length > 0) {
+                traces.push({
+                    x: violations.rule2_below.map(i => xRange[i]),
+                    y: violations.rule2_below.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-2: Below CL',
+                    marker: { color: 'orange', size: 11, symbol: 'circle' },
+                    text: violations.rule2_below.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.r_s_rule_3_b) {
+            if (violations.rule3_increasing.length > 0) {
+                traces.push({
+                    x: violations.rule3_increasing.map(i => xRange[i]),
+                    y: violations.rule3_increasing.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-3: Increasing',
+                    marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+                    text: violations.rule3_increasing.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+            if (violations.rule3_decreasing.length > 0) {
+                traces.push({
+                    x: violations.rule3_decreasing.map(i => xRange[i]),
+                    y: violations.rule3_decreasing.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-3: Decreasing',
+                    marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+                    text: violations.rule3_decreasing.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        if (settings.r_s_rule_4_b) {
+            if (violations.rule4_alternating.length > 0) {
+                traces.push({
+                    x: violations.rule4_alternating.map(i => xRange[i]),
+                    y: violations.rule4_alternating.map(i => dataPoints[i]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Rule-4: Alternating',
+                    marker: { color: 'indianred', size: 9, symbol: 'circle' },
+                    text: violations.rule4_alternating.map(i => timeStamps[i]),
+                    hovertemplate: '%{y}, %{text}'
+                });
+            }
+        }
+
+        // Annotations
+        const annotations = [
+            {
+                x: xRange[xRange.length - 1],
+                y: controllines.mr_cl,
+                text: `CL=${controllines.mr_cl.toFixed(legend_decimal)}`,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 55,
+                ay: 0,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            }
+        ];
+        if (settings.show_3sl_upper) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.mr_ucl,
+                text: `UCL=${controllines.mr_ucl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: -10,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            });
+        }
+        
+        if (settings.show_3sl_lower) {
+            annotations.push({
+                x: xRange[xRange.length - 1],
+                y: controllines.mr_lcl,
+                text: `LCL=${controllines.mr_lcl.toFixed(legend_decimal)}`,
+                showarrow: true,
+                arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+                ax: 50,
+                ay: 10,
+                font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+                align: 'right'
+            });
+        }
+
+        // Adjust x-axis ticks
+        let tickvals = xRange;
+        let ticktext = timeStamps;
+        if (data.length > 30) {
+            const interval = Math.ceil(data.length / 30);
+            tickvals = xRange.filter((_, i) => i % interval === 0);
+            ticktext = timeStamps.filter((_, i) => i % interval === 0);
+        }
+
+        // Layout
+        const layout = {
+            title: { text: mr_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 15 } },
+            margin: { l: 30, r: 30, b: 30, t: 60 },
+            xaxis: {
+                tickangle: 45,
+                tickmode: 'array',
+                tickvals: tickvals,
+                ticktext: ticktext,
+                automargin: true,
+                showline: true,
+                linewidth: 1,
+                linecolor: 'black',
+                mirror: false,
+                ticks: 'outside',
+                gridcolor: 'rgba(0,0,0,0)',
+                tickfont: { size: 10 },
+                zeroline: false,
+                autorange: true
+            },
+            yaxis: {
+                title: { text: 'Moving Range', x: 0.5 },
+                automargin: true,
+                showline: true,
+                linewidth: 1,
+                linecolor: 'black',
+                mirror: false,
+                gridcolor: 'rgba(0,0,0,0)',
+                zeroline: false,
+                autorange: true,
+                ticks: 'outside',
+                tickfont: { size: 8.5 },
+            },
+            annotations: annotations,
+            legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            hovermode: 'closest',
+            shapes: [
+                {
+                    type: 'rect',
+                    x0: 0,
+                    y0: 0,
+                    x1: 1,
+                    y1: 1,
+                    xref: 'paper',
+                    yref: 'paper',
+                    line: { color: 'black', width: 1 },
+                    fillcolor: 'rgba(0,0,0,0)'
+                }
+            ],
+            showlegend: true,
+        };
+
+        // Plot
+        Plotly.newPlot('chartMRDiv', traces, layout, {
+            displaylogo: false,
+            modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
+        });
+    }
+
+    
+
+    // function plotMRChart(data, controllines, settings) {
+    //     if (data.length <= 3) {
+    //         $('#chartMRDiv').html('Not enough data for MR chart');
+    //         return;
+    //     }
+    //     // Reverse data to plot from oldest to newest (since backend provides newest to oldest)
+    //     data = data.reverse();
+    //     // data = data.reverse();
+    //     const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
+    //     const timeStamps = data.map(d => d.time_stamp);
+    //     const dataPoints = data.map(d => d.mr);
+    //     const legend_decimal = settings.legend_decimals;
+
+    //     // Initialize traces
+    //     const traces = [
+    //         {
+    //             x: xRange,
+    //             y: dataPoints,
+    //             type: 'scatter',
+    //             mode: 'lines+markers',
+    //             name: 'Moving Range',
+    //             line: { color: 'cornflowerblue', width: 1 },
+    //             marker: { size: 7 },
+    //             opacity: 0.8,
+    //             text: timeStamps,
+    //             hovertemplate: '%{y}, %{text}'
+    //         },
+    //         {
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.mr_cl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'CL',
+    //             line: { dash: 'dash', color: 'black', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         }
+    //     ];
+
+    //     // Add control lines based on settings
+    //     if (settings.show_3sl_upper) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.mr_ucl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'UCL',
+    //             line: { color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+        
+    //     if (settings.show_3sl_lower) {
+    //         traces.push({
+    //             x: xRange,
+    //             y: Array(xRange.length).fill(controllines.mr_lcl),
+    //             type: 'scatter',
+    //             mode: 'lines',
+    //             name: 'LCL',
+    //             line: { color: 'red', shape: 'hvh' },
+    //             opacity: 0.8,
+    //             showlegend: false
+    //         });
+    //     }
+
+    //     // Compute SPC Rule violations
+    //     // Rule 1: Point > 3σ (beyond UCL/LCL)
+    //     if (settings.rule_1_b) {
+    //         const rule1Above = dataPoints.map((dp, i) => dp > controllines.mr_ucl ? i : null).filter(i => i !== null);
+    //         const rule1Below = dataPoints.map((dp, i) => dp < controllines.mr_lcl ? i : null).filter(i => i !== null);
+    //         if (rule1Above.length > 0) {
+    //             traces.push({
+    //                 x: rule1Above.map(i => xRange[i]),
+    //                 y: rule1Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-1: Above UCL',
+    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
+    //                 text: rule1Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule1Below.length > 0) {
+    //             traces.push({
+    //                 x: rule1Below.map(i => xRange[i]),
+    //                 y: rule1Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-1: Below LCL',
+    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
+    //                 text: rule1Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 2: 9 points in a row on the same side of CL
+    //     if (settings.rule_2_b) {
+    //         const k_r2 = 9;
+    //         let rule2AboveSet = new Set();
+    //         let rule2BelowSet = new Set();
+    //         for (let i = 0; i <= dataPoints.length - k_r2; i++) {
+    //             let allAbove = true;
+    //             let allBelow = true;
+    //             for (let j = i; j < i + k_r2; j++) {
+    //                 if (dataPoints[j] <= controllines.mr_cl) allAbove = false;
+    //                 if (dataPoints[j] >= controllines.mr_cl) allBelow = false;
+    //             }
+    //             if (allAbove) {
+    //                 for (let j = i; j < i + k_r2; j++) rule2AboveSet.add(j);
+    //             }
+    //             if (allBelow) {
+    //                 for (let j = i; j < i + k_r2; j++) rule2BelowSet.add(j);
+    //             }
+    //         }
+    //         const rule2Above = Array.from(rule2AboveSet);
+    //         const rule2Below = Array.from(rule2BelowSet);
+    //         if (rule2Above.length > 0) {
+    //             traces.push({
+    //                 x: rule2Above.map(i => xRange[i]),
+    //                 y: rule2Above.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-2: Above CL',
+    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
+    //                 text: rule2Above.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule2Below.length > 0) {
+    //             traces.push({
+    //                 x: rule2Below.map(i => xRange[i]),
+    //                 y: rule2Below.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-2: Below CL',
+    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
+    //                 text: rule2Below.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 3: 6 points in a row, all increasing or decreasing
+    //     if (settings.rule_3_b) {
+    //         const k_r3 = 6;
+    //         let rule3Increasing = [];
+    //         let rule3Decreasing = [];
+    //         for (let i = 0; i <= dataPoints.length - k_r3; i++) {
+    //             let increasing = true;
+    //             let decreasing = true;
+    //             for (let j = i; j < i + k_r3 - 1; j++) {
+    //                 if (dataPoints[j] >= dataPoints[j + 1]) increasing = false;
+    //                 if (dataPoints[j] <= dataPoints[j + 1]) decreasing = false;
+    //             }
+    //             if (increasing) {
+    //                 for (let j = i; j < i + k_r3; j++) rule3Increasing.push(j);
+    //             }
+    //             if (decreasing) {
+    //                 for (let j = i; j < i + k_r3; j++) rule3Decreasing.push(j);
+    //             }
+    //         }
+    //         if (rule3Increasing.length > 0) {
+    //             traces.push({
+    //                 x: rule3Increasing.map(i => xRange[i]),
+    //                 y: rule3Increasing.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-3: Increasing',
+    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+    //                 text: rule3Increasing.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //         if (rule3Decreasing.length > 0) {
+    //             traces.push({
+    //                 x: rule3Decreasing.map(i => xRange[i]),
+    //                 y: rule3Decreasing.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-3: Decreasing',
+    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
+    //                 text: rule3Decreasing.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Rule 4: 14 points in a row, alternating up and down
+    //     if (settings.rule_4_b) {
+    //         const k_r4 = 14;
+    //         let rule4Alternating = [];
+    //         for (let i = 0; i <= dataPoints.length - k_r4; i++) {
+    //             let alternating = true;
+    //             for (let j = i; j < i + k_r4 - 1; j++) {
+    //                 const slope1 = dataPoints[j + 1] - dataPoints[j];
+    //                 const slope2 = dataPoints[j + 2] - dataPoints[j + 1];
+    //                 if (slope1 * slope2 >= 0) alternating = false;
+    //             }
+    //             if (alternating) {
+    //                 for (let j = i; j < i + k_r4; j++) rule4Alternating.push(j);
+    //             }
+    //         }
+    //         if (rule4Alternating.length > 0) {
+    //             traces.push({
+    //                 x: rule4Alternating.map(i => xRange[i]),
+    //                 y: rule4Alternating.map(i => dataPoints[i]),
+    //                 type: 'scatter',
+    //                 mode: 'markers',
+    //                 name: 'Rule-4: Alternating',
+    //                 marker: { color: 'indianred', size: 9, symbol: 'circle' },
+    //                 text: rule4Alternating.map(i => timeStamps[i]),
+    //                 hovertemplate: '%{y}, %{text}'
+    //             });
+    //         }
+    //     }
+
+    //     // Annotations
+    //     const annotations = [
+    //         {
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.mr_cl,
+    //             text: `CL=${controllines.mr_cl.toFixed(legend_decimal)}`,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 55,
+    //             ay: 0,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         }
+    //     ];
+    //     if (settings.show_3sl_upper) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.mr_ucl,
+    //             text: `UCL=${controllines.mr_ucl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: -10,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         });
+    //     }
+        
+    //     if (settings.show_3sl_lower) {
+    //         annotations.push({
+    //             x: xRange[xRange.length - 1],
+    //             y: controllines.mr_lcl,
+    //             text: `LCL=${controllines.mr_lcl.toFixed(legend_decimal)}`,
+    //             showarrow: true,
+    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
+    //             ax: 50,
+    //             ay: 10,
+    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
+    //             align: 'right'
+    //         });
+    //     }
+
+    //     // Adjust x-axis ticks
+    //     let tickvals = xRange;
+    //     let ticktext = timeStamps;
+    //     if (data.length > 30) {
+    //         const interval = Math.ceil(data.length / 30);
+    //         tickvals = xRange.filter((_, i) => i % interval === 0);
+    //         ticktext = timeStamps.filter((_, i) => i % interval === 0);
+    //     }
+
+    //     // Layout
+    //     const layout = {
+    //         title: { text: mr_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 13 } },
+    //         margin: { l: 30, r: 30, b: 30, t: 60 },
+    //         xaxis: {
+    //             tickangle: 45,
+    //             tickmode: 'array',
+    //             tickvals: tickvals,
+    //             ticktext: ticktext,
+    //             automargin: true,
+    //             showline: true,
+    //             linewidth: 1,
+    //             linecolor: 'black',
+    //             mirror: false,
+    //             ticks: 'outside',
+    //             gridcolor: 'rgba(0,0,0,0)',
+    //             tickfont: { size: 10 },
+    //             zeroline: false,
+    //             autorange: true
+    //         },
+    //         yaxis: {
+    //             title: { text: 'Moving Range', x: 0.5 },
+    //             automargin: true,
+    //             showline: true,
+    //             linewidth: 1,
+    //             linecolor: 'black',
+    //             mirror: false,
+    //             gridcolor: 'rgba(0,0,0,0)',
+    //             zeroline: false,
+    //             autorange: true,
+    //             ticks: 'outside',
+    //             tickfont: { size: 8.5 },
+    //         },
+    //         annotations: annotations,
+    //         legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
+    //         plot_bgcolor: 'rgba(0,0,0,0)',
+    //         hovermode: 'closest',
+    //         shapes: [
+    //             {
+    //                 type: 'rect',
+    //                 x0: 0,
+    //                 y0: 0,
+    //                 x1: 1,
+    //                 y1: 1,
+    //                 xref: 'paper',
+    //                 yref: 'paper',
+    //                 line: { color: 'black', width: 1 },
+    //                 fillcolor: 'rgba(0,0,0,0)'
+    //             }
+    //         ],
+    //         showlegend: true,
+    //     };
+
+    //     // Plot
+    //     Plotly.newPlot('chartMRDiv', traces, layout, {
+    //         displaylogo: false,
+    //         modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
+    //     });
+    // }
+    
+
+    function displayRawData(rawData,relevant_choice_keys,relevant_text_keys) {
+        let timezone = "{{ work_unit_timezone | safe}}"
+        const datetime = 'Sample Time('.concat(timezone,')')
+        const updationtime = 'Updated('.concat(timezone,')')
+        const relevantChoiceKeys = relevant_choice_keys || [];
+        const relevantTextKeys = relevant_text_keys || [];
+
+        const columnDefs = [
+            {headerName: 'Edit', field: 'Edit', width: 80,maxWidth: 100, floatingFilter:false,
+                cellRenderer: function (params) {
+                    if (params.value) {
+                        const div = document.createElement('div');
+                        div.innerHTML = params.value;
+                        return div.firstElementChild.outerHTML;
+                    }
+                    return '';
+                    },},
+                
+                {headerName: datetime, field: 'time_stamp'},
+                {headerName: updationtime, field: 'updation_time'},
+                {headerName: 'Measurement', field: 'data_point'},
+                {headerName: 'Batch/Lot', field: 'lot_no'},
+                {headerName: 'Sample Id', field: 'sample_id'},
+                {headerName: 'Operator', field: 'operator'},
+                {headerName: 'Gauge', field: 'gauge'},
+                {headerName: 'Inspector', field: 'inspector'},
+                {headerName: 'Remarks', field: 'remarks'},
+                {headerName: 'Cause', field: 'causes'},
+                // {headerName: 'Id', field: 'id'},
+        ];
+        // Dynamically add choice fields to column definitions
+        relevantChoiceKeys.forEach(key => {
+            columnDefs.push({ headerName: key, field: key });
+        });
+
+        relevantTextKeys.forEach(key => {
+            columnDefs.push({ headerName: key, field: key });
+        });
+
+
+        const gridOptions = {
+            onGridReady:function(params){
+                       params.columnApi.autoSizeAllColumns();
+            },
+            columnDefs: columnDefs,
+            rowData: rawData,
+            // defaultColDef: { sortable: true, filter: true }
+            defaultColDef:{
+                editable: false,
+                filter: true,
+                // flex:1,
+                // maxWidth: 180,
+                resizable: true,
+                wrapText:false,
+                autoHeight:false,
+                sortable:true,
+                floatingFilter: true,
+                filter: 'agMultiColumnFilter',
+            },
+            enableRangeSelection:true,
+            suppressLastEmptyLineOnPaste:true,
+
+        };
+
+        const gridDiv = document.querySelector('#gridDiv');
+        
+        if (gridDiv.children.length > 0) {
+            gridDiv.innerHTML = '';
+        }
+        new agGrid.Grid(gridDiv, gridOptions);
+        $('#gridDiv').show();
+    }
+
+
+    function setRefreshInterval() {
+        var minutes = parseFloat($('#refresh_rate').val());
+        // Clamp the value between 0.5 and 30
+        if (minutes < 0.5) {
+            minutes = 0.5;
+            $('#refresh_rate').val(minutes); // update the input field
+        } else if (minutes > 30) {
+            minutes = 30;
+            $('#refresh_rate').val(minutes); // update the input field
+        }
+        if (minutes > 0) {
+            var interval = minutes * 60 * 1000;
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            intervalId = setInterval(fetchData, interval);
+        } else if (intervalId) {
+            clearInterval(intervalId);
+        }
+    }
+
+    $('#refresh_rate').change(function() {
+        setRefreshInterval();
+    });
+
+    $('#historical_mu').change(function() {
+        fetchData();
+    });
+    
+    $('#historical_sigma').change(function() {
+        fetchData();
+    });
+
+    $('#display_raw_data').change(function() {
+        fetchData();
+    });
+
+    $('#hide_sidebar').change(function() {
+        $('.r-box').toggle(!$(this).is(':checked'));
+    });
+
+    // $('#last_n_records').change(function() {
+    //     fetchData();
+    // });
+    $('#last_n_records').change(function() {
+        var value = parseInt($(this).val(), 10); // check base int val
+
+        if (isNaN(value) || value < 5 || value > 1000) {
+            alert("Please enter a value between 5 and 1000.");
+            $(this).val(31); // reset to default
+            return; // stop execution
+        }
+
+        fetchData();
+    });
+    // Initial setup
+    fetchData();
+    setRefreshInterval();
+</script>
+
+<style>
+    .error-message {
+        color: red;
+        font-weight: bold;
+        display: block;
+        text-align: center;
+        font-size: 1.25em; /* Equivalent to h1 */
+    }
+</style>
+{% endblock content %}
