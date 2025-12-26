@@ -1,4 +1,3 @@
-
 from django.shortcuts import render
 from app1.models import MapDefectiveSPCScheme, RecordDefectiveData, MapDefectSPCScheme, MapSPCScheme, RecordDefectData, MapPartVariableCharacteristics,MultiStageScheme,MultiStageSchemeItem,ConfVariableCharacterisitics
 from app1.models import RecordAlerts, RecordImrIndividualData, RecordSPCSubgroupData, ConfEquipment , ConfPart,MapDefectChoiceKey,MapDefectTextKey,RecordChoiceDefect,RecordTextDefect,MapDefectiveChoiceKey,MapDefectiveTextKey,RecordChoiceDefective,RecordTextDefective,ConfCause,RecordCauseDefective
@@ -35,6 +34,7 @@ import base64
 from app1.views1.pdf_views import generate_pdf
 from zstatq.zs_control_charts import cumsum_chart,ewma_chart
 from django.templatetags.static import static
+from intelliqs.context_processors import dynamic_labels
 
 
 default_fig_config = {
@@ -45,6 +45,155 @@ default_fig_config = {
         'zoom2d', 'toggleSpikelines', 'hoverClosest3d'
         ]
     }
+
+def related_schemes(part, equipment, link_type='Data Entry'):
+    labels = dynamic_labels()["LABELS"]
+    output_dict={}
+    group_data_entry_array = []
+    related_variable_schemes = MapSPCScheme.objects.filter(part_vc_id__part_id=part, equipment_id=equipment)
+    related_variable_schemes_df = pd.DataFrame(related_variable_schemes.values('id','part_vc_id__vc_id__vc_name','store_as_subgroup','part_vc_id__sequence_priority'))
+    # Sorting according to sequence_priority and id
+    if len(related_variable_schemes_df.index)>0:
+        related_variable_schemes_df = related_variable_schemes_df.sort_values(
+            by=["part_vc_id__sequence_priority", "id"], ascending=[True, True]
+        ).reset_index(drop=True)
+    imr_count = 0
+    xbarr_count =0
+    links = []
+    all_group_rev = reverse('app1:dataentry_all_groups', args=[equipment.pk, part.pk, "new"])
+    group_data_entry_array.append(f'<a href="{all_group_rev}">All Groups</a>')
+
+    for i in related_variable_schemes_df.index:
+        if related_variable_schemes_df.loc[i,'store_as_subgroup']: 
+            text = related_variable_schemes_df.loc[i,'part_vc_id__vc_id__vc_name'] + ' (Xbar-R)'
+            hl = reverse('app1:dataentry_variablesubgroup', args=[related_variable_schemes_df.loc[i,'id'],])
+            hl_eqp = reverse('app1:data_entry_subgroup_all_eqp', args=[related_variable_schemes_df.loc[i,'id'],])
+            xbarr_count+=1
+        else:
+            text = related_variable_schemes_df.loc[i,'part_vc_id__vc_id__vc_name'] + ' (I-MR)'
+            hl = reverse('app1:dataentry_individual', args=[related_variable_schemes_df.loc[i,'id'],])
+            hl_eqp = reverse('app1:dataentry_imr_all_eqp', args=[related_variable_schemes_df.loc[i,'id'],])
+            imr_count+=1
+        col_name = f"Single Data Entry - {labels['variable']}"
+        related_variable_schemes_df.loc[i,col_name] = f'<a href="{hl}">{text}</a>'
+        related_variable_schemes_df.loc[i,'Multi-Eqp Data Entry'] = f'<a href="{hl_eqp}">{text}</a>'
+    if len(related_variable_schemes_df.index) > 0:
+        related_variable_schemes_df['part_vc_id__sequence_priority'] = related_variable_schemes_df['part_vc_id__sequence_priority'].fillna(0).astype(int)
+        output_dict['related_variable_schemes_df_html'] = related_variable_schemes_df[[col_name]].to_html(index=False, render_links=True, escape=False, classes = "table table-bordered")
+        output_dict['multi_eqp_variable_schemes_df_html'] = related_variable_schemes_df[['Multi-Eqp Data Entry']].to_html(index=False, render_links=True, escape=False, classes = "table table-bordered")
+    if imr_count >0:
+        # hl = reverse('app1:dataentry_imr_all_variables', args=[equipment.pk, part.pk])
+        hl = reverse('app1:dataentry_imr_all_variables', args=[equipment.pk, part.pk, "new"])
+        h2 = reverse('app1:dataentry_imr_group_bulk', args=[equipment.pk, part.pk]) 
+        h3 = reverse('app1:dataentry_imr_group_bulk_1', args=[equipment.pk, part.pk]) 
+
+        group_data_entry_array.append(f'<a href="{hl}">All {labels["variable"]} (I-MR)</a>')
+        group_data_entry_array.append(f'<a href="{h2}">Group Bulk (I-MR)</a>')
+        group_data_entry_array.append(f'<a href="{h3}">Group Bulk 2 (I-MR)</a>')
+
+    if xbarr_count >0:
+        hl = reverse('app1:dataentry_subgroup_all_variables', args=[equipment.pk, part.pk])
+        group_data_entry_array.append(f'<a href="{hl}">All {labels["variable"]} (Xbar-R)</a>')
+    
+    related_defective_schemes = MapDefectiveSPCScheme.objects.filter(part=part, equipment=equipment)
+    related_defective_schemes_df = pd.DataFrame(related_defective_schemes.values('id','defective_test__name','defective_test__sequence_priority'))
+
+    if len(related_defective_schemes_df.index) > 0:
+        related_defective_schemes_df = related_defective_schemes_df.sort_values(
+            by=["defective_test__sequence_priority", "id"], ascending=[True, True]
+        ).reset_index(drop=True)
+
+    for i in related_defective_schemes_df.index:
+        text = related_defective_schemes_df.loc[i,'defective_test__name']
+        hl = reverse('app1:dataentry_defective', args=[related_defective_schemes_df.loc[i,'id'],])
+        related_defective_schemes_df.loc[i,'Single Data Entry - Defective (p)'] = f'<a href="{hl}">{text}</a>'
+
+    if len(related_defective_schemes_df.index) > 0:
+        related_defective_schemes_df = related_defective_schemes_df.sort_values(
+            by=["defective_test__sequence_priority", "id"], ascending=[True, True]
+        ).reset_index(drop=True)
+        related_defective_schemes_df['defective_test__sequence_priority'] = related_defective_schemes_df['defective_test__sequence_priority'].fillna(0).astype(int)
+        output_dict['related_defective_schemes_df_html'] = related_defective_schemes_df[['Single Data Entry - Defective (p)']].to_html(index=False, render_links=True, escape=False, classes = "table table-bordered")
+        hl = reverse('app1:dataentry_defective_all', args=[equipment.pk, part.pk])
+        # group_data_entry_array.append(f'<a href="{hl}">All defectives (P Chart)</a>')
+        group_data_entry_array.append(f'<a href="{hl}">All defectives</a>')
+
+    related_defect_schemes = MapDefectSPCScheme.objects.filter(part=part, equipment=equipment)
+    related_defect_schemes_df = pd.DataFrame(related_defect_schemes.values('id','defect_test__name','defect_test__sequence_priority'))
+    
+    if len(related_defect_schemes_df.index) > 0:
+        related_defect_schemes_df = related_defect_schemes_df.sort_values(
+            by=["defect_test__sequence_priority", "id"], ascending=[True, True]
+        ).reset_index(drop=True)
+
+    for i in related_defect_schemes_df.index:
+        text = related_defect_schemes_df.loc[i,'defect_test__name']
+        hl = reverse('app1:dataentry_defect', args=[related_defect_schemes_df.loc[i,'id'],])
+        related_defect_schemes_df.loc[i,'Single Data Entry - Defect (u)'] = f'<a href="{hl}">{text}</a>'
+
+    if len(related_defect_schemes_df.index) > 0:
+        related_defect_schemes_df['defect_test__sequence_priority'] = related_defect_schemes_df['defect_test__sequence_priority'].fillna(0).astype(int)
+        output_dict['related_defect_schemes_df_html'] = related_defect_schemes_df[['Single Data Entry - Defect (u)']].to_html(index=False, render_links=True, escape=False, classes = "table table-bordered")
+        hl = reverse('app1:dataentry_defect_all', args=[equipment.pk, part.pk])
+        # group_data_entry_array.append(f'<a href="{hl}">All defects (U Chart)</a>')
+        group_data_entry_array.append(f'<a href="{hl}">All defects</a>')
+
+    if len(group_data_entry_array) >0:
+        output_dict['group_data_entry_df_html'] = pd.DataFrame({"Multi-Test Data Entry": group_data_entry_array}).to_html(index=False, render_links=True, escape=False, classes = "table table-bordered")
+    
+    # Add link_type and prepare unified DataFrame
+    if len(related_variable_schemes_df.index) > 0:
+        related_variable_schemes_df = related_variable_schemes_df.assign(
+            link_type=lambda df: df['store_as_subgroup'].map({True: 'variablesubgroup', False: 'individual'}),
+            sequence_priority=related_variable_schemes_df['part_vc_id__sequence_priority']
+        )[['id', 'link_type', 'sequence_priority']]
+
+    if len(related_defective_schemes_df.index) > 0:
+        related_defective_schemes_df = related_defective_schemes_df.assign(
+            link_type='defective',
+            sequence_priority=related_defective_schemes_df['defective_test__sequence_priority']
+        )[['id', 'link_type', 'sequence_priority']]
+
+    if len(related_defect_schemes_df.index) > 0:
+        related_defect_schemes_df = related_defect_schemes_df.assign(
+            link_type='defect',
+            sequence_priority=related_defect_schemes_df['defect_test__sequence_priority']
+        )[['id', 'link_type', 'sequence_priority']]
+
+    # Merge all DataFrames into one
+    merged_df = pd.concat([related_variable_schemes_df, related_defective_schemes_df, related_defect_schemes_df])
+    # Sort the unified DataFrame by sequence_priority and id
+    merged_df = merged_df.sort_values(by=['sequence_priority', 'id'])
+    links = []
+    analysis_links = []
+    # Generate links based on the merged DataFrame
+    if link_type == 'Analysis':
+        for _, row in merged_df.iterrows():
+            sid = row['id']
+            if row['link_type'] == 'individual':
+                analysis_links.append(reverse('app1:imranalysis', args=[sid]))
+            elif row['link_type'] == 'variablesubgroup':
+                analysis_links.append(reverse('app1:spcanalysis', args=[sid]))
+            elif row['link_type'] == 'defective':
+                analysis_links.append(reverse('app1:pchart_analysis', args=[sid]))
+            elif row['link_type'] == 'defect':
+                analysis_links.append(reverse('app1:uchart_analysis', args=[sid]))
+            # else:
+            #     analysis_links.append(reverse(f'app1:dataentry_{row["link_type"]}', args=[row['id']]))
+        output_dict['links'] = analysis_links        
+    else:
+        for _, row in merged_df.iterrows():
+            # Construct the URL using reverse() for each row
+            if row['link_type'] == 'variablesubgroup':
+                links.append(reverse('app1:dataentry_variablesubgroup', args=[row['id']]))
+            elif row['link_type'] == 'individual':
+                links.append(reverse('app1:dataentry_individual', args=[row['id']]))
+            else:
+                links.append(reverse(f'app1:dataentry_{row["link_type"]}', args=[row['id']]))
+
+        output_dict['links'] = links
+    return output_dict
+
 
 @login_required(login_url='admin:login')
 def imr_chart_refresh(request, scheme_id):
@@ -60,6 +209,7 @@ def imr_chart_refresh(request, scheme_id):
     historical_s = scheme.historical_sigma,
     i_graph_title = f'I Chart: {vc.vc_name} of {part.part_no} @ {equipment.equipment_name}'
     mr_graph_title = f'MR Chart: {vc.vc_name} of {part.part_no} @ {equipment.equipment_name}'
+    context['add_icon_url']  = static('admin/img/icon-addlink.svg')
     context['i_graph_title'] = i_graph_title
     context['mr_graph_title'] = mr_graph_title
     h_cusum = template_filter.alert_template.h_cusum
@@ -95,12 +245,13 @@ def imr_chart_refresh(request, scheme_id):
         context['historical_s'] = False
 
     context['work_unit_timezone'] = work_unit_timezone
-    # graph_title=f'I Chart: {vc.vc_name} of {part} @ {equipment}'
-    # context['graph_title'] = graph_title
+    all_causes = list(ConfCause.objects.values_list("name",flat=True))
+    context['all_causes'] = all_causes
     form = ImrAnalysisForm()
     context['form'] = form
     context.update(related_schemes(part, equipment))
     return render(request, 'app1/api_entry/refresh_imr_api.html', context)
+
 
 @login_required(login_url='admin:login')
 def realtime_pchart_refresh(request, scheme_id):

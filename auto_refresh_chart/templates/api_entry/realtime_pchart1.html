@@ -1,9 +1,9 @@
 {% extends "admin/base.html" %}
 {% block extrahead %}
 {% load static %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css"/>
-<script src="https://storage.googleapis.com/zometric220818_qtools/staticfiles/agrid/30.0.6_dist_ag-grid-enterprise.js"></script>
+<script src="{% static 'plotly/plotly-2.27.0.min.js' %}"></script>
+<link rel="stylesheet" href="{% static 'css/all.min.css' %}"/> 
+<script src="{% static 'agrid/30.0.6_dist_ag-grid-enterprise.js' %}"></script> 
 <title>Data Entry Defective</title>
 
 {% endblock extrahead %}
@@ -89,7 +89,7 @@
                                         <tr>
                                             <td style="vertical-align: middle;">Last N Records</td>
                                             <td>
-                                                <input type="number" id="last_n_records" name="last_n_records" value="31" min="1" max="1000">
+                                                <input type="number" id="last_n_records" name="last_n_records" value="31" min="1" max="3000">
                                             </td>
                                         </tr>
                                         <tr>
@@ -623,8 +623,8 @@
 
     $('#last_n_records').change(function() {
         var value = parseInt($(this).val(), 10); // check base int val
-        if (isNaN(value) || value < 5 || value > 1000) {
-            alert("Please enter a value between 5 and 1000.");
+        if (isNaN(value) || value < 5 || value > 3000) {
+            alert("Please enter a value between 5 and 3000.");
             $(this).val(31); // reset to default
             return; // stop execution
         }

@@ -296,8 +296,6 @@ def plot_spc_rules(data_array, center_line_array, control_line_sd_array, upper_c
     }
     return violations
 
-
-
 class RealtimePChartDataView(APIView):
     permission_classes = [IsAuthenticated]  # Require authentication
     def get(self, request, scheme_id):
@@ -311,8 +309,8 @@ class RealtimePChartDataView(APIView):
             last_n_records = int(request.query_params.get('last_n_records', 31))
         except Exception as e:
             pass
-        if last_n_records > 1000:
-            last_n_records = 1000
+        if last_n_records > 3000:
+            last_n_records = 3000
         records = RecordDefectiveData.objects.filter(
             part=scheme.part, equipment=scheme.equipment, defective_test=scheme.defective_test
         ).order_by('-sample_date_time')[:last_n_records]
@@ -394,7 +392,6 @@ class RealtimePChartDataView(APIView):
             response_data['relevant_text_keys'] = [str(key) for key in relevant_text_keys]
 
         return Response(response_data)
-
 
 class PChartDataByPeriodView(APIView):
     def post(self, request, scheme_id):
@@ -501,8 +498,6 @@ class PChartDataByPeriodView(APIView):
 
         return Response(response_data)
     
-
-
 # Full updated RefreshIMRChartDataView
 class RefreshIMRChartDataView(APIView):
     permission_classes = [IsAuthenticated]
@@ -530,8 +525,8 @@ class RefreshIMRChartDataView(APIView):
             last_n_records = int(request.query_params.get('last_n_records', 31))
         except Exception as e:
             pass
-        if last_n_records > 1000:
-            last_n_records = 1000
+        if last_n_records > 3000:
+            last_n_records = 3000
         records = RecordImrIndividualData.objects.select_related(
             'operator', 'inspector', 'gauge'
         ).filter(
@@ -572,7 +567,11 @@ class RefreshIMRChartDataView(APIView):
                 'data_point': row['data_point'],
                 'time_stamp': row['time_stamp_str']
             })
-            # data_points.append(row['data_point'])
+        
+        if len(records_df)>=4:
+            id_links = records_df['id'].values.tolist()[::-1]
+        else:
+            id_links = []
 
         use_historical_mu = request.query_params.get('use_historical_mu', 'false').lower() == 'true'
         use_historical_sigma = request.query_params.get('use_historical_sigma', 'false').lower() == 'true'
@@ -644,7 +643,7 @@ class RefreshIMRChartDataView(APIView):
             })
         mr_data_with_time = mr_data_with_time[::-1]
 
-        response_data = {'i_data': data, 'mr_data': mr_data_with_time, 'controllines': controllines, 'settings': settings}
+        response_data = {'i_data': data, 'mr_data': mr_data_with_time, 'controllines': controllines, 'settings': settings, 'id_links':id_links}
         if historical_mu is not None:
             response_data['historical_mu'] = historical_mu
         if historical_sigma is not None:
@@ -727,4 +726,3 @@ class RefreshIMRChartDataView(APIView):
         response_data = self.clean_floats(response_data)
 
         return Response(response_data)
-

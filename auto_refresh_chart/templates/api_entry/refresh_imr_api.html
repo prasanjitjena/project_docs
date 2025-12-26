@@ -1,9 +1,9 @@
 {% extends "admin/base.html" %}
 {% block extrahead %}
 {% load static %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css"/>
-<script src="https://storage.googleapis.com/zometric220818_qtools/staticfiles/agrid/30.0.6_dist_ag-grid-enterprise.js"></script>
+<script src="{% static 'plotly/plotly-2.27.0.min.js' %}"></script>
+<link rel="stylesheet" href="{% static 'css/all.min.css' %}"/> 
+<script src="{% static 'agrid/30.0.6_dist_ag-grid-enterprise.js' %}"></script> 
 <title>Data Entry Defective</title>
 
 {% endblock extrahead %}
@@ -21,13 +21,13 @@
                                     S#
                                 </th>
                                 <th class="toptable">
-                                    Equipment
+                                    {{ LABELS.equipment }}
                                 </th>
                                 <th class="toptable">
-                                    Part
-                                </th>
+                                    {{ LABELS.part }}
+                                </th>  
                                 <th class="toptable">
-                                    Variable 
+                                    {{ LABELS.variable }}
                                 </th>
                                 <th class="toptable">
                                     LSL
@@ -118,7 +118,13 @@
                                             <td><input type="checkbox" id="historical_sigma" name="historical_sigma" ></td>
                                         </tr>
                                         {% endif %}
-                                         <tr>
+
+                                        <tr>
+                                            <td style="vertical-align: middle;">Show MR chart</td>
+                                            <td><input type="checkbox" id="display_mr_chart" name="display_mr_chart"></td>
+                                        </tr>
+
+                                        <tr>
                                             <td style="vertical-align: middle;">Display Raw Data</td>
                                             <td><input type="checkbox" id="display_raw_data" name="display_raw_data"></td>
                                         </tr>
@@ -160,6 +166,7 @@
         var useHistoricalmu = $('#historical_mu').is(':checked');
         var useHistoricalsigma = $('#historical_sigma').is(':checked');
         var includeRawData = $('#display_raw_data').is(':checked');
+        var includeMRChart = $('#display_mr_chart').is(':checked');
         var lastNRecords = $('#last_n_records').val() || 31; // default 31
         var url = endpoint  + '?use_historical_mu=' + useHistoricalmu 
                             + '&use_historical_sigma=' + useHistoricalsigma
@@ -212,14 +219,29 @@
                     response.settings,
                     response.historical_mu,
                     response.historical_sigma,
-                    response.i_violations  // New: pass violations
+                    response.i_violations,
+                    response.id_links
                 );
-                plotMRChart(
-                    response.mr_data,
-                    response.controllines,
-                    response.settings,
-                    response.mr_violations  
-                )
+
+                if (includeMRChart) {
+                    $('#chartMRDiv').show();   // ✅ show explicitly
+                    plotMRChart(
+                        response.mr_data,
+                        response.controllines,
+                        response.settings,
+                        response.mr_violations
+                    );
+                } else {
+                    // ✅ IMPORTANT FIX
+                    $('#chartMRDiv').hide();    // hide container
+                    Plotly.purge('chartMRDiv'); // remove existing plot
+                }
+                // plotMRChart(
+                //     response.mr_data,
+                //     response.controllines,
+                //     response.settings,
+                //     response.mr_violations  
+                // )
                 if (response.raw_data && includeRawData) {
                     displayRawData(response.raw_data, response.relevant_choice_keys, response.relevant_text_keys);
                 } else {
@@ -282,612 +304,28 @@
         });
     }
 
-    // function plotIChart(data, controllines, settings, historical_mu, historical_sigma) {
-    //     if (data.length <= 4) {
-    //         $('#chartIDiv').html('Not enough data for I chart');
-    //         return;
-    //     }
-    //     // Reverse data to plot from oldest to newest (since backend sorts by -time_stamp)
-    //     data = data.reverse();
-    //     const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
-    //     const timeStamps = data.map(d => d.time_stamp);
-    //     const dataPoints = data.map(d => d.data_point);
-    //     const legend_decimal = settings.legend_decimals;
+    // I-CHART CLICK HANDLER (KEY FIX)
+    function attachIChartClickHandler() {
+        const plotDiv = document.getElementById("chartIDiv");
+        if (!plotDiv) return;
 
-    //     // Initialize traces
-    //     const traces = [
-    //         {
-    //             x: xRange,
-    //             y: dataPoints,
-    //             type: 'scatter',
-    //             mode: 'lines+markers',
-    //             name: 'Observations',
-    //             line: { color: 'cornflowerblue', width: 1 },
-    //             marker: { size: 7 },
-    //             opacity: 0.8,
-    //             text: timeStamps,
-    //             hovertemplate: '%{y}, %{text}'
-    //         },
-    //         {
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.i_cl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'CL',
-    //             line: { dash: 'dash', color: 'black', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         }
-    //     ];
+        // Remove old handlers (important for auto refresh)
+        plotDiv.removeAllListeners?.('plotly_click');
 
-    //     // Add control and spec lines based on settings
-    //     if (settings.show_3sl_upper) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.i_ucl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'UCL',
-    //             line: { color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-        
-    //     if (settings.show_3sl_lower) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.i_lcl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'LCL',
-    //             line: { color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-       
-    //     if (settings.show_2sl_upper) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.i_2su),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'U2sL',
-    //             line: { dash: 'dot', color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-       
-    //     if (settings.show_2sl_lower) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.i_2sl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'L2sL',
-    //             line: { dash: 'dot', color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-        
-    //     if (settings.show_usl && controllines.usl !== null) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.usl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'USL',
-    //             line: { color: 'blue', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-        
-    //     if (settings.show_lsl && controllines.lsl !== null) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.lsl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'LSL',
-    //             line: { color: 'blue', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
+        plotDiv.on('plotly_click', function (event) {
+            const point = event.points[0];
+            const recordId = point.customdata;
+            currentRecordId = recordId;
 
-    //     // Compute SPC Rule violations
-    //     const rule1Above = dataPoints.map((dp, i) => dp > controllines.i_ucl ? i : null).filter(i => i !== null);
-    //     const rule1Below = dataPoints.map((dp, i) => dp < controllines.i_lcl ? i : null).filter(i => i !== null);
+            if (recordId) {
+                fetchRecordDetails(recordId);
+            }
+        });
+    }
 
-        
-    //     // Rule 1: Point > 3σ (beyond UCL/LCL)
-    //     if (settings.rule_1_b) {
-    //         const rule1Above = dataPoints.map((dp, i) => dp > controllines.i_ucl ? i : null).filter(i => i !== null);
-    //         const rule1Below = dataPoints.map((dp, i) => dp < controllines.i_lcl ? i : null).filter(i => i !== null);
-    //         if (rule1Above.length > 0) {
-    //             traces.push({
-    //                 x: rule1Above.map(i => xRange[i]),
-    //                 y: rule1Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-1: Above UCL',
-    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
-    //                 text: rule1Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule1Below.length > 0) {
-    //             traces.push({
-    //                 x: rule1Below.map(i => xRange[i]),
-    //                 y: rule1Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-1: Below LCL',
-    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
-    //                 text: rule1Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
+    
 
-    //     // Rule 2: 9 points in a row on the same side of CL
-    //     if (settings.rule_2_b) {
-    //         const k_r2 = 9;
-    //         let rule2AboveSet = new Set();
-    //         let rule2BelowSet = new Set();
-    //         for (let i = 0; i <= dataPoints.length - k_r2; i++) {
-    //             let allAbove = true;
-    //             let allBelow = true;
-    //             for (let j = i; j < i + k_r2; j++) {
-    //                 if (dataPoints[j] <= controllines.i_cl) allAbove = false;
-    //                 if (dataPoints[j] >= controllines.i_cl) allBelow = false;
-    //             }
-    //             if (allAbove) {
-    //                 for (let j = i; j < i + k_r2; j++) rule2AboveSet.add(j);
-    //             }
-    //             if (allBelow) {
-    //                 for (let j = i; j < i + k_r2; j++) rule2BelowSet.add(j);
-    //             }
-    //         }
-    //         const rule2Above = Array.from(rule2AboveSet);
-    //         const rule2Below = Array.from(rule2BelowSet);
-    //         if (rule2Above.length > 0) {
-    //             traces.push({
-    //                 x: rule2Above.map(i => xRange[i]),
-    //                 y: rule2Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-2: Above CL',
-    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
-    //                 text: rule2Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule2Below.length > 0) {
-    //             traces.push({
-    //                 x: rule2Below.map(i => xRange[i]),
-    //                 y: rule2Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-2: Below CL',
-    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
-    //                 text: rule2Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 3: 6 points in a row, all increasing or decreasing
-    //     if (settings.rule_3_b) {
-    //         const k_r3 = 6;
-    //         let rule3Increasing = [];
-    //         let rule3Decreasing = [];
-    //         for (let i = 0; i <= dataPoints.length - k_r3; i++) {
-    //             let increasing = true;
-    //             let decreasing = true;
-    //             for (let j = i; j < i + k_r3 - 1; j++) {
-    //                 if (dataPoints[j] >= dataPoints[j + 1]) increasing = false;
-    //                 if (dataPoints[j] <= dataPoints[j + 1]) decreasing = false;
-    //             }
-    //             if (increasing) {
-    //                 for (let j = i; j < i + k_r3; j++) rule3Increasing.push(j);
-    //             }
-    //             if (decreasing) {
-    //                 for (let j = i; j < i + k_r3; j++) rule3Decreasing.push(j);
-    //             }
-    //         }
-    //         if (rule3Increasing.length > 0) {
-    //             traces.push({
-    //                 x: rule3Increasing.map(i => xRange[i]),
-    //                 y: rule3Increasing.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-3: Increasing',
-    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
-    //                 text: rule3Increasing.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule3Decreasing.length > 0) {
-    //             traces.push({
-    //                 x: rule3Decreasing.map(i => xRange[i]),
-    //                 y: rule3Decreasing.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-3: Decreasing',
-    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
-    //                 text: rule3Decreasing.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 4: 14 points in a row, alternating up and down
-    //     if (settings.rule_4_b) {
-    //         const k_r4 = 14;
-    //         let rule4Alternating = [];
-    //         for (let i = 0; i <= dataPoints.length - k_r4; i++) {
-    //             let alternating = true;
-    //             for (let j = i; j < i + k_r4 - 1; j++) {
-    //                 const slope1 = dataPoints[j + 1] - dataPoints[j];
-    //                 const slope2 = dataPoints[j + 2] - dataPoints[j + 1];
-    //                 if (slope1 * slope2 >= 0) alternating = false;
-    //             }
-    //             if (alternating) {
-    //                 for (let j = i; j < i + k_r4; j++) rule4Alternating.push(j);
-    //             }
-    //         }
-    //         if (rule4Alternating.length > 0) {
-    //             traces.push({
-    //                 x: rule4Alternating.map(i => xRange[i]),
-    //                 y: rule4Alternating.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-4: Alternating',
-    //                 marker: { color: 'indianred', size: 9, symbol: 'circle' },
-    //                 text: rule4Alternating.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 5: 2 out of 3 points > 2σ from CL (same side)
-    //     if (settings.rule_5_b) {
-    //         const k_r5 = 2;
-    //         const windowSize = k_r5 + 1;
-    //         let rule5AboveSet = new Set();
-    //         let rule5BelowSet = new Set();
-    //         const u2sd = controllines.i_2su;
-    //         const l2sd = controllines.i_2sl;
-    //         for (let i = 0; i <= dataPoints.length - windowSize; i++) {
-    //             let countAbove = 0;
-    //             let countBelow = 0;
-    //             for (let j = i; j < i + windowSize; j++) {
-    //                 if (dataPoints[j] > u2sd) countAbove++;
-    //                 if (dataPoints[j] < l2sd) countBelow++;
-    //             }
-    //             if (countAbove >= k_r5) {
-    //                 for (let j = i; j < i + windowSize; j++) {
-    //                     if (dataPoints[j] > u2sd) rule5AboveSet.add(j);
-    //                 }
-    //             }
-    //             if (countBelow >= k_r5) {
-    //                 for (let j = i; j < i + windowSize; j++) {
-    //                     if (dataPoints[j] < l2sd) rule5BelowSet.add(j);
-    //                 }
-    //             }
-    //         }
-    //         const rule5Above = Array.from(rule5AboveSet);
-    //         const rule5Below = Array.from(rule5BelowSet);
-    //         if (rule5Above.length > 0) {
-    //             traces.push({
-    //                 x: rule5Above.map(i => xRange[i]),
-    //                 y: rule5Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-5: Above 2σ',
-    //                 marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
-    //                 text: rule5Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule5Below.length > 0) {
-    //             traces.push({
-    //                 x: rule5Below.map(i => xRange[i]),
-    //                 y: rule5Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-5: Below 2σ',
-    //                 marker: { color: 'darkviolet', size: 9, symbol: 'circle' },
-    //                 text: rule5Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 6: 4 out of 5 points > 1σ from CL (same side)
-    //     if (settings.rule_6_b) {
-    //         const k_r6 = 4;
-    //         const windowSize = k_r6 + 1;
-    //         let rule6AboveSet = new Set();
-    //         let rule6BelowSet = new Set();
-    //         const u1sd = controllines.i_cl + historical_sigma;
-    //         const l1sd = controllines.i_cl - historical_sigma;
-    //         for (let i = 0; i <= dataPoints.length - windowSize; i++) {
-    //             let countAbove = 0;
-    //             let countBelow = 0;
-    //             for (let j = i; j < i + windowSize; j++) {
-    //                 if (dataPoints[j] > u1sd) countAbove++;
-    //                 if (dataPoints[j] < l1sd) countBelow++;
-    //             }
-    //             if (countAbove >= k_r6) {
-    //                 for (let j = i; j < i + windowSize; j++) {
-    //                     if (dataPoints[j] > u1sd) rule6AboveSet.add(j);
-    //                 }
-    //             }
-    //             if (countBelow >= k_r6) {
-    //                 for (let j = i; j < i + windowSize; j++) {
-    //                     if (dataPoints[j] < l1sd) rule6BelowSet.add(j);
-    //                 }
-    //             }
-    //         }
-    //         const rule6Above = Array.from(rule6AboveSet);
-    //         const rule6Below = Array.from(rule6BelowSet);
-    //         if (rule6Above.length > 0) {
-    //             traces.push({
-    //                 x: rule6Above.map(i => xRange[i]),
-    //                 y: rule6Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-6: Above 1σ',
-    //                 marker: { color: 'violet', size: 9, symbol: 'circle' },
-    //                 text: rule6Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule6Below.length > 0) {
-    //             traces.push({
-    //                 x: rule6Below.map(i => xRange[i]),
-    //                 y: rule6Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-6: Below 1σ',
-    //                 marker: { color: 'violet', size: 9, symbol: 'circle' },
-    //                 text: rule6Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 7: 15 points in a row within 1σ of CL
-    //     if (settings.rule_7_b) {
-    //         const k_r7 = 15;
-    //         let rule7Set = new Set();
-    //         const u1sd = controllines.i_cl + historical_sigma;
-    //         const l1sd = controllines.i_cl - historical_sigma;
-    //         for (let i = 0; i <= dataPoints.length - k_r7; i++) {
-    //             let allWithin = true;
-    //             for (let j = i; j < i + k_r7; j++) {
-    //                 if (dataPoints[j] >= u1sd || dataPoints[j] <= l1sd) allWithin = false;
-    //             }
-    //             if (allWithin) {
-    //                 for (let j = i; j < i + k_r7; j++) rule7Set.add(j);
-    //             }
-    //         }
-    //         const rule7 = Array.from(rule7Set);
-    //         if (rule7.length > 0) {
-    //             traces.push({
-    //                 x: rule7.map(i => xRange[i]),
-    //                 y: rule7.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-7: Within 1σ',
-    //                 marker: { color: 'yellowgreen', size: 9, symbol: 'circle' },
-    //                 text: rule7.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 8: 8 points in a row > 1σ from CL (either side)
-    //     if (settings.rule_8_b) {
-    //         const k_r8 = 8;
-    //         let rule8Set = new Set();
-    //         const u1sd = controllines.i_cl + historical_sigma;
-    //         const l1sd = controllines.i_cl - historical_sigma;
-    //         for (let i = 0; i <= dataPoints.length - k_r8; i++) {
-    //             let allOutside = true;
-    //             for (let j = i; j < i + k_r8; j++) {
-    //                 if (dataPoints[j] <= u1sd && dataPoints[j] >= l1sd) allOutside = false;
-    //             }
-    //             if (allOutside) {
-    //                 for (let j = i; j < i + k_r8; j++) rule8Set.add(j);
-    //             }
-    //         }
-    //         const rule8 = Array.from(rule8Set);
-    //         if (rule8.length > 0) {
-    //             traces.push({
-    //                 x: rule8.map(i => xRange[i]),
-    //                 y: rule8.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-8: Outside 1σ',
-    //                 marker: { color: 'darkgreen', size: 9, symbol: 'circle' },
-    //                 text: rule8.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-        
-    //     // Annotations
-    //     const annotations = [
-    //         {
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.i_cl,
-    //             text: `CL=${controllines.i_cl.toFixed(legend_decimal)}`,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 55,
-    //             ay: 0,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         }
-    //     ];
-    //     if (settings.show_3sl_upper) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.i_ucl,
-    //             text: `UCL=${controllines.i_ucl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: -10,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         });
-    //     }
-        
-    //     if (settings.show_3sl_lower) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.i_lcl,
-    //             text: `LCL=${controllines.i_lcl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: 10,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         });
-    //     }
-        
-    //     if (settings.show_2sl_upper) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.i_2su,
-    //             text: `U2sL=${controllines.i_2su.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: -5,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
-    //         });
-    //     }
-        
-    //     if (settings.show_2sl_lower) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.i_2sl,
-    //             text: `L2sL=${controllines.i_2sl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: 5,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
-    //         });
-    //     }
-        
-    //     if (settings.show_usl && controllines.usl !== null) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.usl,
-    //             text: `USL=${controllines.usl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: -15,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
-    //         });
-    //     }
-        
-    //     if (settings.show_lsl && controllines.lsl !== null) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.lsl,
-    //             text: `LSL=${controllines.lsl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: 15,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' }
-    //         });
-    //     }
-
-    //     // Adjust x-axis ticks
-    //     let tickvals = xRange;
-    //     let ticktext = timeStamps;
-    //     if (data.length > 30) {
-    //         const interval = Math.ceil(data.length / 30);
-    //         tickvals = xRange.filter((_, i) => i % interval === 0);
-    //         ticktext = timeStamps.filter((_, i) => i % interval === 0);
-    //     }
-
-    //     // Layout
-    //     const layout = {
-    //         // height: 500, // Height in pixels
-    //         title: { text: i_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 13 } },
-    //         margin: { l: 30, r: 30, b: 30, t: 60 },
-    //         xaxis: {
-    //             tickangle: 45,
-    //             tickmode: 'array',
-    //             tickvals: tickvals,
-    //             ticktext: ticktext,
-    //             automargin: true,
-    //             showline: true,
-    //             linewidth: 1,
-    //             linecolor: 'black',
-    //             mirror: false,
-    //             ticks: 'outside',
-    //             gridcolor: 'rgba(0,0,0,0)',
-    //             tickfont: { size: 10 },
-    //             zeroline: false,
-    //             autorange: true
-    //         },
-    //         yaxis: {
-    //             title: { text: yaxis_title, x: 0.5 },
-    //             automargin: true,
-    //             showline: true,
-    //             linewidth: 1,
-    //             linecolor: 'black',
-    //             mirror: false,
-    //             gridcolor: 'rgba(0,0,0,0)',
-    //             zeroline: false,
-    //             autorange: true,
-    //             ticks: 'outside',
-    //             tickfont: { size: 8.5 },
-    //         },
-    //         annotations: annotations,
-    //         legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
-    //         plot_bgcolor: 'rgba(0,0,0,0)',
-    //         hovermode: 'closest',
-    //         shapes: [
-    //             {
-    //                 type: 'rect',
-    //                 x0: 0,
-    //                 y0: 0,
-    //                 x1: 1,
-    //                 y1: 1,
-    //                 xref: 'paper',
-    //                 yref: 'paper',
-    //                 line: { color: 'black', width: 1 },
-    //                 fillcolor: 'rgba(0,0,0,0)'
-    //             }
-    //         ],
-    //         showlegend: true,
-    //     };
-
-    //     // Plot
-    //     Plotly.newPlot('chartIDiv', traces, layout, {
-    //         displaylogo: false,
-    //         modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
-    //     });
-    // }
-
-    function plotIChart(data, controllines, settings, historical_mu, historical_sigma, violations) {
+    function plotIChart(data, controllines, settings, historical_mu, historical_sigma, violations, id_links) {
         if (data.length <= 4 || !controllines || !controllines.i_cl) {
             $('#chartIDiv').html('Not enough data or invalid control lines for I chart');
             return;
@@ -911,6 +349,7 @@
                 marker: { size: 7 },
                 opacity: 0.8,
                 text: timeStamps,
+                customdata: id_links,    // ⭐ ADD THIS LINE
                 hovertemplate: '%{y}, %{text}'
             },
             {
@@ -1345,9 +784,10 @@
         Plotly.newPlot('chartIDiv', traces, layout, {
             displaylogo: false,
             modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
+        }).then(() => {
+            attachIChartClickHandler(); // ✅ CORRECT PLACE
         });
-        // iChartInitialized = true;
-    
+
     }
 
     
@@ -1624,336 +1064,6 @@
     }
 
     
-
-    // function plotMRChart(data, controllines, settings) {
-    //     if (data.length <= 3) {
-    //         $('#chartMRDiv').html('Not enough data for MR chart');
-    //         return;
-    //     }
-    //     // Reverse data to plot from oldest to newest (since backend provides newest to oldest)
-    //     data = data.reverse();
-    //     // data = data.reverse();
-    //     const xRange = Array.from({ length: data.length }, (_, i) => i + 1);
-    //     const timeStamps = data.map(d => d.time_stamp);
-    //     const dataPoints = data.map(d => d.mr);
-    //     const legend_decimal = settings.legend_decimals;
-
-    //     // Initialize traces
-    //     const traces = [
-    //         {
-    //             x: xRange,
-    //             y: dataPoints,
-    //             type: 'scatter',
-    //             mode: 'lines+markers',
-    //             name: 'Moving Range',
-    //             line: { color: 'cornflowerblue', width: 1 },
-    //             marker: { size: 7 },
-    //             opacity: 0.8,
-    //             text: timeStamps,
-    //             hovertemplate: '%{y}, %{text}'
-    //         },
-    //         {
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.mr_cl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'CL',
-    //             line: { dash: 'dash', color: 'black', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         }
-    //     ];
-
-    //     // Add control lines based on settings
-    //     if (settings.show_3sl_upper) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.mr_ucl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'UCL',
-    //             line: { color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-        
-    //     if (settings.show_3sl_lower) {
-    //         traces.push({
-    //             x: xRange,
-    //             y: Array(xRange.length).fill(controllines.mr_lcl),
-    //             type: 'scatter',
-    //             mode: 'lines',
-    //             name: 'LCL',
-    //             line: { color: 'red', shape: 'hvh' },
-    //             opacity: 0.8,
-    //             showlegend: false
-    //         });
-    //     }
-
-    //     // Compute SPC Rule violations
-    //     // Rule 1: Point > 3σ (beyond UCL/LCL)
-    //     if (settings.rule_1_b) {
-    //         const rule1Above = dataPoints.map((dp, i) => dp > controllines.mr_ucl ? i : null).filter(i => i !== null);
-    //         const rule1Below = dataPoints.map((dp, i) => dp < controllines.mr_lcl ? i : null).filter(i => i !== null);
-    //         if (rule1Above.length > 0) {
-    //             traces.push({
-    //                 x: rule1Above.map(i => xRange[i]),
-    //                 y: rule1Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-1: Above UCL',
-    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
-    //                 text: rule1Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule1Below.length > 0) {
-    //             traces.push({
-    //                 x: rule1Below.map(i => xRange[i]),
-    //                 y: rule1Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-1: Below LCL',
-    //                 marker: { color: 'darkred', size: 9, symbol: 'circle' },
-    //                 text: rule1Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 2: 9 points in a row on the same side of CL
-    //     if (settings.rule_2_b) {
-    //         const k_r2 = 9;
-    //         let rule2AboveSet = new Set();
-    //         let rule2BelowSet = new Set();
-    //         for (let i = 0; i <= dataPoints.length - k_r2; i++) {
-    //             let allAbove = true;
-    //             let allBelow = true;
-    //             for (let j = i; j < i + k_r2; j++) {
-    //                 if (dataPoints[j] <= controllines.mr_cl) allAbove = false;
-    //                 if (dataPoints[j] >= controllines.mr_cl) allBelow = false;
-    //             }
-    //             if (allAbove) {
-    //                 for (let j = i; j < i + k_r2; j++) rule2AboveSet.add(j);
-    //             }
-    //             if (allBelow) {
-    //                 for (let j = i; j < i + k_r2; j++) rule2BelowSet.add(j);
-    //             }
-    //         }
-    //         const rule2Above = Array.from(rule2AboveSet);
-    //         const rule2Below = Array.from(rule2BelowSet);
-    //         if (rule2Above.length > 0) {
-    //             traces.push({
-    //                 x: rule2Above.map(i => xRange[i]),
-    //                 y: rule2Above.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-2: Above CL',
-    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
-    //                 text: rule2Above.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule2Below.length > 0) {
-    //             traces.push({
-    //                 x: rule2Below.map(i => xRange[i]),
-    //                 y: rule2Below.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-2: Below CL',
-    //                 marker: { color: 'orange', size: 11, symbol: 'circle' },
-    //                 text: rule2Below.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 3: 6 points in a row, all increasing or decreasing
-    //     if (settings.rule_3_b) {
-    //         const k_r3 = 6;
-    //         let rule3Increasing = [];
-    //         let rule3Decreasing = [];
-    //         for (let i = 0; i <= dataPoints.length - k_r3; i++) {
-    //             let increasing = true;
-    //             let decreasing = true;
-    //             for (let j = i; j < i + k_r3 - 1; j++) {
-    //                 if (dataPoints[j] >= dataPoints[j + 1]) increasing = false;
-    //                 if (dataPoints[j] <= dataPoints[j + 1]) decreasing = false;
-    //             }
-    //             if (increasing) {
-    //                 for (let j = i; j < i + k_r3; j++) rule3Increasing.push(j);
-    //             }
-    //             if (decreasing) {
-    //                 for (let j = i; j < i + k_r3; j++) rule3Decreasing.push(j);
-    //             }
-    //         }
-    //         if (rule3Increasing.length > 0) {
-    //             traces.push({
-    //                 x: rule3Increasing.map(i => xRange[i]),
-    //                 y: rule3Increasing.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-3: Increasing',
-    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
-    //                 text: rule3Increasing.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //         if (rule3Decreasing.length > 0) {
-    //             traces.push({
-    //                 x: rule3Decreasing.map(i => xRange[i]),
-    //                 y: rule3Decreasing.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-3: Decreasing',
-    //                 marker: { color: 'rosybrown', size: 9, symbol: 'circle' },
-    //                 text: rule3Decreasing.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Rule 4: 14 points in a row, alternating up and down
-    //     if (settings.rule_4_b) {
-    //         const k_r4 = 14;
-    //         let rule4Alternating = [];
-    //         for (let i = 0; i <= dataPoints.length - k_r4; i++) {
-    //             let alternating = true;
-    //             for (let j = i; j < i + k_r4 - 1; j++) {
-    //                 const slope1 = dataPoints[j + 1] - dataPoints[j];
-    //                 const slope2 = dataPoints[j + 2] - dataPoints[j + 1];
-    //                 if (slope1 * slope2 >= 0) alternating = false;
-    //             }
-    //             if (alternating) {
-    //                 for (let j = i; j < i + k_r4; j++) rule4Alternating.push(j);
-    //             }
-    //         }
-    //         if (rule4Alternating.length > 0) {
-    //             traces.push({
-    //                 x: rule4Alternating.map(i => xRange[i]),
-    //                 y: rule4Alternating.map(i => dataPoints[i]),
-    //                 type: 'scatter',
-    //                 mode: 'markers',
-    //                 name: 'Rule-4: Alternating',
-    //                 marker: { color: 'indianred', size: 9, symbol: 'circle' },
-    //                 text: rule4Alternating.map(i => timeStamps[i]),
-    //                 hovertemplate: '%{y}, %{text}'
-    //             });
-    //         }
-    //     }
-
-    //     // Annotations
-    //     const annotations = [
-    //         {
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.mr_cl,
-    //             text: `CL=${controllines.mr_cl.toFixed(legend_decimal)}`,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 55,
-    //             ay: 0,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         }
-    //     ];
-    //     if (settings.show_3sl_upper) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.mr_ucl,
-    //             text: `UCL=${controllines.mr_ucl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowsize: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: -10,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         });
-    //     }
-        
-    //     if (settings.show_3sl_lower) {
-    //         annotations.push({
-    //             x: xRange[xRange.length - 1],
-    //             y: controllines.mr_lcl,
-    //             text: `LCL=${controllines.mr_lcl.toFixed(legend_decimal)}`,
-    //             showarrow: true,
-    //             arrowhead: 1, arrowwidth: 1, arrowcolor: "#636363",
-    //             ax: 50,
-    //             ay: 10,
-    //             font: { size: 10, color: 'black', family: 'Courier New, monospace' },
-    //             align: 'right'
-    //         });
-    //     }
-
-    //     // Adjust x-axis ticks
-    //     let tickvals = xRange;
-    //     let ticktext = timeStamps;
-    //     if (data.length > 30) {
-    //         const interval = Math.ceil(data.length / 30);
-    //         tickvals = xRange.filter((_, i) => i % interval === 0);
-    //         ticktext = timeStamps.filter((_, i) => i % interval === 0);
-    //     }
-
-    //     // Layout
-    //     const layout = {
-    //         title: { text: mr_graph_title, y: 0.95, x: 0.5, xanchor: 'center', font: { size: 13 } },
-    //         margin: { l: 30, r: 30, b: 30, t: 60 },
-    //         xaxis: {
-    //             tickangle: 45,
-    //             tickmode: 'array',
-    //             tickvals: tickvals,
-    //             ticktext: ticktext,
-    //             automargin: true,
-    //             showline: true,
-    //             linewidth: 1,
-    //             linecolor: 'black',
-    //             mirror: false,
-    //             ticks: 'outside',
-    //             gridcolor: 'rgba(0,0,0,0)',
-    //             tickfont: { size: 10 },
-    //             zeroline: false,
-    //             autorange: true
-    //         },
-    //         yaxis: {
-    //             title: { text: 'Moving Range', x: 0.5 },
-    //             automargin: true,
-    //             showline: true,
-    //             linewidth: 1,
-    //             linecolor: 'black',
-    //             mirror: false,
-    //             gridcolor: 'rgba(0,0,0,0)',
-    //             zeroline: false,
-    //             autorange: true,
-    //             ticks: 'outside',
-    //             tickfont: { size: 8.5 },
-    //         },
-    //         annotations: annotations,
-    //         legend: { orientation: 'v', x: 1.03, y: 1, xanchor: 'left', yanchor: 'top', bgcolor: 'rgba(255, 255, 255, 0.8)' },
-    //         plot_bgcolor: 'rgba(0,0,0,0)',
-    //         hovermode: 'closest',
-    //         shapes: [
-    //             {
-    //                 type: 'rect',
-    //                 x0: 0,
-    //                 y0: 0,
-    //                 x1: 1,
-    //                 y1: 1,
-    //                 xref: 'paper',
-    //                 yref: 'paper',
-    //                 line: { color: 'black', width: 1 },
-    //                 fillcolor: 'rgba(0,0,0,0)'
-    //             }
-    //         ],
-    //         showlegend: true,
-    //     };
-
-    //     // Plot
-    //     Plotly.newPlot('chartMRDiv', traces, layout, {
-    //         displaylogo: false,
-    //         modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'zoomOut2d', 'zoomIn2d', 'zoom2d']
-    //     });
-    // }
-    
-
     function displayRawData(rawData,relevant_choice_keys,relevant_text_keys) {
         let timezone = "{{ work_unit_timezone | safe}}"
         const datetime = 'Sample Time('.concat(timezone,')')
@@ -2049,6 +1159,436 @@
         }
     }
 
+    let currentRecordId = null; // Store the clicked record ID globally
+    const links = {{ links|safe }}; // Ensure links array is passed correctly
+    let allCauses = {{ all_causes | safe }};
+
+            
+    // Fetch record details and manage modals
+    function fetchRecordDetails(recordId) {
+        var getRecordDetailsUrl = "{% url 'app1:imr_record_details' 999999 %}".replace("999999/", "");
+        return fetch(`${getRecordDetailsUrl}${recordId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    populateModalTable(data.record);
+                    document.getElementById("descriptionModal").style.display = "block"; // Open descriptionModal
+                    document.getElementById("rootCauseModal").style.display = "none";    // Ensure rootCauseModal is closed
+                } else {
+                    alert("Record not found!");
+                }
+            })
+            .catch(error => console.error("Error fetching record:", error));
+    }
+
+    // Populate the descriptionModal table with record data
+    function populateModalTable(record) {
+        var tableBody = document.getElementById("recordTableBody");
+        tableBody.innerHTML = ""; // Clear previous data
+        for (const [key, value] of Object.entries(record)) {
+            if (key === "choice_keys" && Array.isArray(value)) {
+                value.forEach(item => {
+                    let row = document.createElement("tr");
+                    row.innerHTML = `<td>${item.key}</td><td>${item.value}</td>`;
+                    tableBody.appendChild(row);
+                });
+            } else if (key === "text_keys" && Array.isArray(value)) {
+                value.forEach(item => {
+                    let row = document.createElement("tr");
+                    row.innerHTML = `<td>${item.key}</td><td>${item.value}</td>`;
+                    tableBody.appendChild(row);
+                });
+            } else if (key === "cause_data" && Array.isArray(value)) {
+                value.forEach((item, index) => {
+                    let causeRow = document.createElement("tr");
+                    causeRow.innerHTML = `<td>Cause ${index + 1}</td><td>${item.cause_name}</td>`;
+                    tableBody.appendChild(causeRow);
+                    if (item.cause_description && item.cause_description.trim() !== "") {
+                        let descRow = document.createElement("tr");
+                        descRow.innerHTML = `<td>Description ${index + 1}</td><td>${item.cause_description}</td>`;
+                        tableBody.appendChild(descRow);
+                    }
+                });
+            } else {
+                let row = document.createElement("tr");
+                let formattedKey = key.replace(/_/g, " ");
+                formattedKey = formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1).toLowerCase();
+                row.innerHTML = `<td>${formattedKey}</td><td>${value !== null ? value : "N/A"}</td>`;
+                tableBody.appendChild(row);
+            }
+        }
+    }
+    
+    function addRootCause(){
+        const RULE_CHOICES = [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'], ['8', '8'], ['no_rule', 'no_rule']];
+        const descriptionModal = document.getElementById("descriptionModal");
+        const rootCauseModal = document.getElementById("rootCauseModal");
+        const rootCauseForm = document.getElementById("rootCauseForm");
+        const ruleSelect = document.getElementById("rule");
+        const causeSelect = document.getElementById("cause");
+
+        ruleSelect.innerHTML = "";
+        RULE_CHOICES.forEach(([value, label]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            if (value === "no_rule") option.selected = true;
+            ruleSelect.appendChild(option);
+        });
+
+        causeSelect.innerHTML = "";
+        allCauses.forEach(cause => {
+            const option = document.createElement("option");
+            option.value = cause;
+            option.textContent = cause;
+            causeSelect.appendChild(option);
+        });
+
+        if (!currentRecordId) {
+            alert("No record selected!");
+            return;
+        }
+
+        document.getElementById("rootCauseRecordId").value = currentRecordId;
+        rootCauseModal.style.display = "block";
+
+        rootCauseForm.onsubmit = function (e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            let baseUrl = "{% url 'app1:add_root_cause' 0 %}";
+            let cause_url = baseUrl.replace("/0/", `/${currentRecordId}/`);
+
+            fetch(cause_url, {
+                method: "POST",
+                body: formData,
+                headers: { "X-CSRFToken": "{{ csrf_token }}" }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Root Cause Added!");
+                    rootCauseForm.reset();
+                    rootCauseModal.style.display = "none";
+                    //descriptionModal.style.display = "none";
+                    fetchRecordDetails(currentRecordId).then(() => {
+                        descriptionModal.style.display = "block";
+                    }).catch(err => {
+                        console.error("Failed to refresh data:", err);
+                        alert("Failed to refresh data, please try again.");
+                    });
+                } else {
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch(err => console.error("Error:", err));
+        };
+
+        closeRootCauseModal.onclick = function () {
+            rootCauseModal.style.display = "none";
+        };
+    }
+
+    // Handle for Edit Data point Modal
+    function openEditDataPoint() {
+        const modal = document.getElementById('editDataPointModal');
+        modal.style.display = 'block';
+
+        let baseUrl = "{% url 'app1:record_imr_individual_data_details' 0 %}";
+        let edit_data_url = baseUrl.replace("/0/", `/${currentRecordId}/`);
+
+        fetch(edit_data_url)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch record data');
+                return response.json();
+            })
+            .then(data => {
+                populateEditForm(data);
+                document.getElementById('editRecordId').value = currentRecordId;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Unable to load data for editing');
+            });
+
+        // Close button functionality
+        document.getElementById('closeEditModal').onclick = function () {
+            modal.style.display = 'none';
+        };
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var descriptionModal = document.getElementById("descriptionModal");
+        var rootCauseModal = document.getElementById("rootCauseModal");
+        var closeModal = document.getElementById("closeModal");
+        var closeRootCauseModal = document.getElementById("closeRootCauseModal");
+
+        closeModal.onclick = function () {
+            descriptionModal.style.display = "none";
+        };
+
+        window.onclick = function (event) {
+            if (event.target === descriptionModal) descriptionModal.style.display = "none";
+            if (event.target === rootCauseModal) rootCauseModal.style.display = "none";
+        };
+
+        const editDataPointForm = document.getElementById('editDataPointForm');
+        if (editDataPointForm) {
+            editDataPointForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const saveButton = this.querySelector('button[type="submit"]');
+                if (saveButton.disabled) return;
+    
+                saveButton.disabled = true;
+                const formData = new FormData(this);
+                const data = { causes: [] };
+    
+                // Collect main fields, choices, and texts
+                formData.forEach((value, key) => {
+                    if (!key.startsWith('cause_')) {
+                        data[key] = value;
+                    }
+                });
+    
+                // Collect causes
+                const causes = {};
+                formData.forEach((value, key) => {
+                    if (key.startsWith('cause_')) {
+                        const [prefix, field, id] = key.split('_');
+                        if (!causes[id]) causes[id] = { id: id };
+                        if (field === 'rule') causes[id].rule = value;
+                        else if (field === 'cause') causes[id].cause_id = value;
+                        else if (field === 'notes') causes[id].notes = value;
+                    }
+                });
+                data.causes = Object.values(causes);
+    
+                let baseUrl = "{% url 'app1:update_record' 0 %}";
+                let update_data_url = baseUrl.replace("/0/", `/${currentRecordId}/`);
+    
+                fetch(update_data_url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    saveButton.disabled = false;
+                    if (result.success) {
+                        alert('Record updated successfully');
+                        document.getElementById('editDataPointModal').style.display = 'none';
+                        fetchRecordDetails(currentRecordId).then(() => {
+                            document.getElementById("descriptionModal").style.display = "block";
+                        }).catch(err => {
+                            console.error("Failed to refresh data:", err);
+                            alert("Failed to refresh data, please try again.");
+                        });
+                    } else {
+                        alert('Error: ' + result.error);
+                    }
+                })
+                .catch(error => {
+                    saveButton.disabled = false;
+                    console.error('Error:', error);
+                    alert('Failed to update record');
+                });
+            }, { once: false });
+        }
+    });
+
+    function populateEditForm(data) {
+        const mainFieldsDiv = document.getElementById('mainFields');
+        const choiceFieldsDiv = document.getElementById('choiceFields');
+        const textFieldsDiv = document.getElementById('textFields');
+        const causeFieldsDiv = document.getElementById('causeFields');
+    
+        // Clear all divs
+        mainFieldsDiv.innerHTML = '';
+        choiceFieldsDiv.innerHTML = '';
+        textFieldsDiv.innerHTML = '';
+        causeFieldsDiv.innerHTML = '';
+    
+        // Create a single table in mainFieldsDiv
+        const table = document.createElement('table');
+        table.className = 'edit-table'; // Class for styling
+        const tbody = document.createElement('tbody');
+    
+        // **Main Fields Section**
+        const mainHeaderRow = document.createElement('tr');
+        tbody.appendChild(mainHeaderRow);
+    
+        const mainFields = [
+            { name: 'time_stamp', label: 'Time stamp', type: 'datetime-local' },
+            { name: 'lot_no', label: 'Lot no', type: 'text' },
+            { name: 'serial_no', label: 'Serial no', type: 'text' },
+            { name: 'remarks', label: 'Remarks', type: 'textarea' },
+            { name: 'data_point', label: 'Data point', type: 'number', step: 'any', min: 0 },
+            { name: 'sample_id', label: 'Sample id', type: 'number' },
+        ];
+    
+        mainFields.forEach(field => {
+            const row = document.createElement('tr');
+            const labelCell = document.createElement('td');
+            labelCell.textContent = field.label;
+            const inputCell = document.createElement('td');
+            let input;
+            if (field.type === 'textarea') {
+                input = document.createElement('textarea');
+                input.name = field.name;
+                input.value = data.main[field.name] || '';
+                input.rows = 3;
+                input.cols = 20;
+            } else {
+                input = document.createElement('input');
+                input.type = field.type;
+                input.name = field.name;
+                if (field.name === 'time_stamp' && data.main[field.name]) {
+                    const dateObj = new Date(data.main[field.name]);
+                    const tzOffset = -dateObj.getTimezoneOffset();
+                    const localDate = new Date(dateObj.getTime() + tzOffset * 60 * 1000);
+                    input.value = localDate.toISOString().slice(0, 19);
+                    input.step = 1;
+                } else {
+                    input.value = data.main[field.name] || '';
+                }
+                if (field.step) input.step = field.step;
+                if (field.min !== undefined) input.min = field.min;
+            }
+            inputCell.appendChild(input);
+            row.appendChild(labelCell);
+            row.appendChild(inputCell);
+            tbody.appendChild(row);
+        });
+    
+        // Additional Main Fields (Operator, Inspector, Gauge)
+        const additionalFields = [
+            { label: 'Operator', name: 'operator', options: data.operators, selectedId: data.main.operator_id },
+            { label: 'Inspector', name: 'inspector', options: data.inspectors, selectedId: data.main.inspector_id },
+            { label: 'Gauge', name: 'gauge', options: data.gauges, selectedId: data.main.gauge_id }
+        ];
+    
+        additionalFields.forEach(field => {
+            const row = document.createElement('tr');
+            const labelCell = document.createElement('td');
+            labelCell.textContent = field.label;
+            const selectCell = document.createElement('td');
+            const select = document.createElement('select');
+            select.name = field.name;
+            select.innerHTML = '<option value="">----</option>' + 
+                field.options.map(opt => 
+                    `<option value="${opt.id}" ${opt.id === field.selectedId ? 'selected' : ''}>${opt.name}</option>`
+                ).join('');
+            selectCell.appendChild(select);
+            row.appendChild(labelCell);
+            row.appendChild(selectCell);
+            tbody.appendChild(row);
+        });
+    
+        // **Choice Fields Section**
+        if (data.choices.length > 0) {
+            const choiceHeaderRow = document.createElement('tr');
+            tbody.appendChild(choiceHeaderRow);
+    
+            data.choices.forEach(choice => {
+                const row = document.createElement('tr');
+                const labelCell = document.createElement('td');
+                labelCell.textContent = choice.choice_key;
+                const selectCell = document.createElement('td');
+                const select = document.createElement('select');
+                select.name = `choice_${choice.choice_key}`;
+                const options = data.all_choice_values[choice.choice_key].map(val => 
+                    `<option value="${val.id}" ${val.id === choice.choice_id ? 'selected' : ''}>${val.name}</option>`
+                ).join('');
+                select.innerHTML = `<option value="">----</option>${options}`;
+                selectCell.appendChild(select);
+                row.appendChild(labelCell);
+                row.appendChild(selectCell);
+                tbody.appendChild(row);
+            });
+        }
+    
+        // **Text Fields Section**
+        if (data.texts.length > 0) {
+            const textHeaderRow = document.createElement('tr');
+            tbody.appendChild(textHeaderRow);
+    
+            data.texts.forEach(text => {
+                const row = document.createElement('tr');
+                const labelCell = document.createElement('td');
+                labelCell.textContent = text.key_name;
+                const inputCell = document.createElement('td');
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = `text_${text.id}`;
+                input.value = text.value || '';
+                inputCell.appendChild(input);
+                row.appendChild(labelCell);
+                row.appendChild(inputCell);
+                tbody.appendChild(row);
+            });
+        }
+    
+        // **Cause Fields Section**
+        if (data.causes.length > 0) {
+            data.causes.forEach((cause, index) => {
+                // Cause Header
+                const causeHeaderRow = document.createElement('tr');
+                // Rule Row
+                const ruleRow = document.createElement('tr');
+                const ruleLabelCell = document.createElement('td');
+                ruleLabelCell.textContent = 'Rule:';
+                const ruleInputCell = document.createElement('td');
+                const ruleSelect = document.createElement('select');
+                ruleSelect.name = `cause_rule_${cause.id}`;
+                const ruleOptions = ['1', '2', '3', '4', '5', '6', '7', '8', 'no_rule'];
+                ruleSelect.innerHTML = ruleOptions.map(option =>
+                    `<option value="${option}" ${option === cause.rule ? 'selected' : ''}>${option}</option>`
+                ).join('');
+                ruleInputCell.appendChild(ruleSelect);
+                ruleRow.appendChild(ruleLabelCell);
+                ruleRow.appendChild(ruleInputCell);
+                tbody.appendChild(ruleRow);
+    
+                // Cause Row
+                const causeRow = document.createElement('tr');
+                const causeLabelCell = document.createElement('td');
+                causeLabelCell.textContent = 'Cause:';
+                const causeInputCell = document.createElement('td');
+                const causeSelect = document.createElement('select');
+                causeSelect.name = `cause_cause_${cause.id}`;
+                causeSelect.innerHTML = data.all_causes.map(val =>
+                    `<option value="${val.id}" ${val.id === cause.cause_id ? 'selected' : ''}>${val.name}</option>`
+                ).join('');
+                causeInputCell.appendChild(causeSelect);
+                causeRow.appendChild(causeLabelCell);
+                causeRow.appendChild(causeInputCell);
+                tbody.appendChild(causeRow);
+    
+                // Notes Row
+                const notesRow = document.createElement('tr');
+                const notesLabelCell = document.createElement('td');
+                notesLabelCell.textContent = 'Notes:';
+                const notesInputCell = document.createElement('td');
+                const notesTextarea = document.createElement('textarea');
+                notesTextarea.name = `cause_notes_${cause.id}`;
+                notesTextarea.value = cause.notes || '';
+                notesTextarea.rows = 3;
+                notesTextarea.cols = 40;
+                notesInputCell.appendChild(notesTextarea);
+                notesRow.appendChild(notesLabelCell);
+                notesRow.appendChild(notesInputCell);
+                tbody.appendChild(notesRow);
+            });
+        }
+    
+        table.appendChild(tbody);
+        mainFieldsDiv.appendChild(table);
+    }
+
+
+
     $('#refresh_rate').change(function() {
         setRefreshInterval();
     });
@@ -2065,18 +1605,19 @@
         fetchData();
     });
 
+    $('#display_mr_chart').change(function() {
+        fetchData();
+    });
+
     $('#hide_sidebar').change(function() {
         $('.r-box').toggle(!$(this).is(':checked'));
     });
 
-    // $('#last_n_records').change(function() {
-    //     fetchData();
-    // });
     $('#last_n_records').change(function() {
         var value = parseInt($(this).val(), 10); // check base int val
 
-        if (isNaN(value) || value < 5 || value > 1000) {
-            alert("Please enter a value between 5 and 1000.");
+        if (isNaN(value) || value < 5 || value > 3000) {
+            alert("Please enter a value between 5 and 3000.");
             $(this).val(31); // reset to default
             return; // stop execution
         }
@@ -2087,6 +1628,73 @@
     fetchData();
     setRefreshInterval();
 </script>
+
+<!-- Add Record Modal -->
+<div id="descriptionModal" class="modal" style="width: 28%; height: 45vh; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; border: 2px solid black; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5); z-index: 1000; display: none; overflow-y: auto;">
+    <span id="closeModal" style="position: absolute; top: -5px; right: 5px; cursor: pointer; font-size: 30px; font-weight: bold; color: red; z-index: 1001;">&times;</span>
+    <div class="modal-content" style="padding: 20px; position: relative; height: 100%; display: flex; flex-direction: column;">
+        <div class="modal-body" style="justify-content: center; overflow-y: auto; max-height: 90vh; padding-right: 10px;">
+            <table id="recordTable">
+                <tbody id="recordTableBody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer" style="margin-top: 15px;text-align: left;width: 100%;display: flex;justify-content: flex-start;align-items: center;height: 30px; /* Adjust as needed */padding: 5px 0; /* Reduce vertical padding */">
+            {% if perms.app1.add_recordimrindividualdata%}
+            <button type="button" class="r-button" onclick="addRootCause()">
+                <img src="{{ add_icon_url }}" > Root cause
+            </button>
+            {% endif %}
+
+            {% if perms.app1.change_recordimrindividualdata%}
+            <button type="button" class="r-button" onclick="openEditDataPoint()"  style="width: 100px;">Edit</button>
+            {% endif %}
+        </div>
+    </div>
+</div>  
+
+<!-- Edit Data Point Modal -->
+<div id="editDataPointModal" class="modal" 
+    style="width: 28%; height: 49vh; position: fixed; top: 45%; left: 55%; transform: translate(-50%, -50%); background-color: white; border: 2px solid black; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5); z-index: 1000; display: none; overflow-y:auto; overflow-x: auto;">
+    <span id="closeEditModal" style="position: absolute; top: -10px; right: 17px; cursor: pointer; font-size: 30px; font-weight: bold; color: red;">×</span>
+    <h2 style="text-align: center; margin-top: 10px;">Edit Data Point</h2>
+    <form id="editDataPointForm" style="padding: 10px; max-height: 80%; overflow-y:auto; overflow-x: auto; ">
+        <input type="hidden" name="record_id" id="editRecordId">
+        <!-- Main Fields Container -->
+        <div id="mainFields"></div>
+        <!-- Choice Fields Container -->
+        <div id="choiceFields"></div>
+        <!-- Text Fields Container -->
+        <div id="textFields"></div>
+        <!-- Cause Fields Container -->
+        <div id="causeFields"></div>
+        <div style="text-align: left;">
+            <button type="submit" class="r-button"  style="width: 100px;">Save</button>
+        </div>
+    </form>
+</div>
+
+<!-- Add Root Cause Modal -->
+<div id="rootCauseModal" class="modal"
+    style="width: 28%; height: 49vh; position: fixed; top: 45%; left: 55%; transform: translate(-50%, -50%); background-color: white; border: 2px solid black; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5); z-index: 1000; display: none; overflow-y: auto; overflow-x: auto;">
+    <span id="closeRootCauseModal" style="position: absolute; top: 10px; right: 20px; cursor: pointer; font-size: 30px; font-weight: bold; color: red;">×</span>
+    <h2 style="text-align: center; margin-top: 10px;">Add Root Cause</h2>
+    <form id="rootCauseForm" style="padding-left: 20px; white-space: nowrap; margin-top: 10px; overflow-y: auto; overflow-x: auto; ">
+        <input type="hidden" name="record_id" id="rootCauseRecordId">
+        
+        <label for="rule">Rule:</label>
+        <select name="rule" id="rule" required></select><br><br>
+        
+        <label for="cause"><b>Cause:</b></label>
+        <select name="cause" id="cause" required></select><br><br>
+        
+        <label for="notes">Notes:</label><br>
+        <textarea name="notes" id="notes" rows="4" cols="40"></textarea><br><br>
+        
+        <div style="text-align: left;" >
+            <button type="submit" class="r-button"  style="width: 100px;">Save</button>
+        </div>
+    </form>
+</div>
 
 <style>
     .error-message {
